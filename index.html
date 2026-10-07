@@ -151,6 +151,23 @@ details.more[open]{padding-bottom:12px}
 .ptable{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
 .ptable td{padding:6px 4px;border-bottom:1px solid var(--line)}
 .ptable td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.th{width:44px;height:44px;border-radius:10px;overflow:hidden;flex:none;background:var(--chip);padding:0}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.phbox{display:flex;align-items:center;gap:12px;margin-top:14px}
+.phbox .big{width:84px;height:84px;border-radius:14px;overflow:hidden;background:var(--chip);flex:none;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
+.phbox .big img{width:100%;height:100%;object-fit:cover}
+.qcam{height:50px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:22px;text-align:center;overflow:hidden;padding:0}
+.qcam img{width:100%;height:100%;object-fit:cover}
+.qrow.cam{grid-template-columns:1fr 58px 72px 46px 46px}
+.pv{position:fixed;inset:0;z-index:95;background:#000;display:none;flex-direction:column}
+.pv.show{display:flex}
+.pv img{flex:1;min-height:0;object-fit:contain;width:100%}
+.pv .vb{display:flex;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+.pv .vb button{color:#fff;font-size:17px;padding:10px;font-weight:600}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:50px;height:50px;border-radius:25px;background:var(--card);box-shadow:var(--shadow);font-size:26px;color:var(--accent);text-align:center}
+.stepper .v{font-size:28px;font-weight:700;min-width:48px;text-align:center;font-variant-numeric:tabular-nums}
+.cashcard .big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px}
 /* login */
 .login{max-width:380px;margin:12vh auto 0;padding:0 20px;text-align:center}
 .login .logo{width:84px;height:84px;border-radius:22px;margin:0 auto 14px;display:block}
@@ -181,11 +198,14 @@ details.more[open]{padding-bottom:12px}
   <button class="tab active" data-tab="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h7"/></svg>Заказы</button>
   <button class="tab" data-tab="buy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.5l2.2 11h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/><path d="m10.5 10.5 2 2 3.5-3.5"/></svg>Закуп</button>
   <button class="tab" data-tab="clients"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M16.5 14.6c2.3 0 3.7 1.5 4.1 4"/></svg>Клиенты</button>
+  <button class="tab" data-tab="cash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/></svg>Касса</button>
   <button class="tab" data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Ещё</button>
 </nav>
 
 <div class="sheet" id="sheet"><div class="backdrop" data-act="closeSheet"></div><div class="panel" id="panel"></div></div>
 <div class="inv" id="inv"></div>
+<div class="pv" id="pv"><div class="vb"><button data-act="closePhoto">Закрыть</button><button id="pvDel">Удалить фото</button></div><img id="pvImg" alt=""></div>
+<input type="file" id="phInput" accept="image/*" hidden>
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -254,6 +274,22 @@ const DB={
     const p={};for(const k in patch)p[k]=fbVal(patch[k]);fb.updateDoc(fb.doc(fb.db,coll,id),p).catch(onErr);},
   remove(coll,id){if(mode==='local'){delete local[coll][id];delete cache[coll][id];localSave();scheduleRender();return;}fb.deleteDoc(fb.doc(fb.db,coll,id)).catch(onErr);},
 };
+/* ---- photos: separate collection, compressed ---- */
+const photoCache={};
+function compressImage(file,max,q){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight;const k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',q));};img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('Не удалось открыть фото'));};img.src=url;});}
+function putPhoto(dataUrl,orderId){const id='ph'+uid();photoCache[id]=dataUrl;
+  if(mode==='local'){local.photos=local.photos||{};local.photos[id]=dataUrl;localSave();}
+  else fb.setDoc(fb.doc(fb.db,'photos',id),{data:dataUrl,orderId:orderId||'',created:Date.now(),by:me.email}).catch(onErr);
+  return id;}
+async function getPhoto(id){if(!id)return null;if(photoCache[id])return photoCache[id];
+  if(mode==='local'){return (local.photos||{})[id]||null;}
+  try{const s=await fb.getDoc(fb.doc(fb.db,'photos',id));if(s.exists()){photoCache[id]=s.data().data;return photoCache[id];}}catch(e){}return null;}
+function delPhoto(id){if(!id)return;delete photoCache[id];if(mode==='local'){if(local.photos){delete local.photos[id];localSave();}}else fb.deleteDoc(fb.doc(fb.db,'photos',id)).catch(()=>{});}
+function hydratePhotos(root){$$('img[data-ph]',root).forEach(async img=>{if(img.getAttribute('src'))return;const v=await getPhoto(img.dataset.ph);if(v)img.src=v;});}
+function pickPhoto(orderId,cb,max){const inp=$('#phInput');inp.value='';inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;try{const d=await compressImage(f,max||720,0.62);cb(putPhoto(d,orderId));}catch(e){alert(e.message||e);}};inp.click();}
+let pvCtx=null,formPhoto=null;
+$('#pvDel').addEventListener('click',()=>{if(!pvCtx||!pvCtx.onDelete||!confirm('Удалить это фото?'))return;pvCtx.onDelete();$('#pv').classList.remove('show');toast('Фото удалено');});
+async function viewPhoto(id,onDelete){pvCtx={id,onDelete};$('#pvImg').removeAttribute('src');$('#pv').classList.add('show');$('#pvDel').style.display=onDelete?'':'none';const v=await getPhoto(id);if(v)$('#pvImg').src=v;}
 async function initData(){
   if(mode==='local'){
     try{local=JSON.parse(localStorage.getItem(LKEY));}catch(e){}
@@ -298,10 +334,12 @@ const isDone=it=>it.status==='bought'||it.status==='checked';
 function calc(o){
   const items=itemsOf(o);let goods=0,markup=0,n=0,bought=0,supKnown=0;
   items.forEach(it=>{if(it.status==='na')return;n++;const q=+it.qty||0,s=q*(+it.price||0);goods+=s;if(isDone(it))bought++;if(it.priceSup!=null&&it.priceSup!==''){markup+=q*((+it.price||0)-(+it.priceSup));supKnown++;}});
-  goods=r2(goods);const commission=r2(goods*(+o.commission||0)/100),packing=+o.packing||0,delivery=+o.delivery||0;
+  let boughtGoods=0,todo=0,todoSum=0;items.forEach(it=>{if(it.status==='na')return;const s=(+it.qty||0)*(+it.price||0);if(isDone(it))boughtGoods+=s;else{todo++;todoSum+=s;}});
+  goods=r2(goods);const commission=Math.round(goods*(+o.commission||0)/100),packing=+o.packing||0,delivery=+o.delivery||0;
   const total=r2(goods+packing+commission+delivery);
   const pays=paysOf(o);const paid=r2(pays.reduce((s,p)=>s+(+p.amount||0)*(+p.rate||1),0));
-  return {items,goods,commission,packing,delivery,total,paid,balance:r2(paid-total),n,bought,markup:r2(markup),profit:r2(commission+markup),pays};
+  const spent=r2(boughtGoods+Math.round(boughtGoods*(+o.commission||0)/100)+packing+delivery);
+  return {items,goods,commission,packing,delivery,total,paid,balance:r2(paid-total),n,bought,markup:r2(markup),profit:r2(commission+markup),pays,boughtGoods:r2(boughtGoods),spent,left:r2(paid-spent),todo,todoSum:r2(todoSum)};
 }
 const ordTitle=o=>'№'+(o.num||'—')+' · '+(o.clientName||'Без клиента');
 function groupItems(items){const gs=[],map={};items.forEach(it=>{const g=(it.group||'').trim();if(!(g in map)){map[g]={g,items:[]};gs.push(map[g]);}map[g].items.push(it);});return gs;}
@@ -321,8 +359,9 @@ function renderMain(){
   const pageMode=!!ui.page;tb.classList.toggle('hide',pageMode);document.body.classList.toggle('nobar',pageMode);
   const y=window.scrollY;
   if(ui.page&&ui.page.type==='order'){const o=order(ui.page.id);if(!o){ui.page=null;return renderMain();}m.innerHTML=renderOrder(o);}
-  else m.innerHTML={orders:renderOrders,buy:renderBuy,clients:renderClients,more:renderMore}[ui.tab]();
+  else m.innerHTML={orders:renderOrders,buy:renderBuy,clients:renderClients,cash:renderCash,more:renderMore}[ui.tab]();
   $$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===ui.tab));
+  hydratePhotos(m);
   if(ui.keepScroll){window.scrollTo(0,y);}ui.keepScroll=true;
 }
 function go(fn){ui.keepScroll=false;fn();renderMain();window.scrollTo(0,0);}
@@ -337,7 +376,7 @@ const demoBanner=()=>mode==='local'?'<div class="demo">Демо-режим: да
 const stBadge=s=>'<span class="badge '+(ST[s]||ST.pick).c+'">'+(ST[s]||ST.pick).t+'</span>';
 
 /* ---- orders list ---- */
-const OF={active:{t:'Активные',f:o=>o.status!=='closed'},await:{t:'Ждут оплату',f:o=>o.status==='await'||o.status==='reserve'},buy:{t:'Закуп',f:o=>['paid','buying','check'].includes(o.status)},ship:{t:'Отправлены',f:o=>o.status==='shipped'},debt:{t:'Должны нам',f:o=>o.status!=='pick'&&calc(o).balance<-0.009},closed:{t:'Закрытые',f:o=>o.status==='closed'}};
+const OF={active:{t:'Активные',f:o=>o.status!=='closed'},await:{t:'Ждут оплату',f:o=>o.status==='await'||o.status==='reserve'},buy:{t:'Закуп',f:o=>['paid','buying','check'].includes(o.status)},ship:{t:'Отправлены',f:o=>o.status==='shipped'},debt:{t:'Должны нам',f:o=>o.status!=='pick'&&calc(o).balance<-0.009},cargo:{t:'Карго не оплачено',f:o=>o.ship&&+o.ship.ourCost>0&&!o.ship.ourPaid},closed:{t:'Закрытые',f:o=>o.status==='closed'}};
 function orderRow(o){
   const c=calc(o),cur=o.currency||'RUB';
   const prog=c.n?'выкуплено '+c.bought+'/'+c.n:'нет позиций';
@@ -360,12 +399,17 @@ function ordersList(){
 }
 
 /* ---- order page ---- */
-function itemRow(o,it,showClient){
+function itemRow(o,it,showClient,naBtn){
   const cur=o.currency||'RUB',q=+it.qty||0,sum=q*(+it.price||0);
   const ckCls=it.status==='na'?'na':it.status==='checked'?'v2':isDone(it)?'on':'';
   const ckTxt=it.status==='na'?'✕':it.status==='checked'?'✓✓':'✓';
   const sub=[showClient?ordTitle(o):'',it.req?'просили: '+it.req:'',it.status==='res'?'забронировано':'',it.status==='req'?(o.type==='cosm'?'заказано':'ждём метраж'):'',it.note].filter(Boolean).join(' · ');
-  return '<div class="item'+(it.status==='na'?' na':'')+'"><button class="ck '+ckCls+'" data-act="tick" data-o="'+o.id+'" data-i="'+it.id+'" aria-label="Выкуплено">'+ckTxt+'</button><button class="body" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><div class="nm">'+esc(it.name||'Без названия')+'</div>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</button><button class="sum" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><b>'+(q?nf.format(r2(sum)):'—')+'</b><span>'+(q?nf.format(q)+' '+esc(it.unit||'м'):'? '+esc(it.unit||'м'))+' × '+nf.format(+it.price||0)+'</span></button></div>';
+  return '<div class="item'+(it.status==='na'?' na':'')+'"><button class="ck '+ckCls+'" data-act="tick" data-o="'+o.id+'" data-i="'+it.id+'" aria-label="Выкуплено">'+ckTxt+'</button>'+(it.photo?'<button class="th" data-act="viewItemPhoto" data-o="'+o.id+'" data-i="'+it.id+'"><img data-ph="'+it.photo+'" alt=""></button>':'')+'<button class="body" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><div class="nm">'+esc(it.name||'Без названия')+'</div>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</button><button class="sum" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><b>'+(q&&+it.price?nf.format(r2(sum)):'—')+'</b><span>'+(q?nf.format(q)+' '+esc(it.unit||'м'):'? '+esc(it.unit||'м'))+' × '+(+it.price?nf.format(+it.price):'цена?')+'</span></button>'+(naBtn&&!isDone(it)?'<button class="badge m" style="flex:none;padding:8px 10px;font-size:13px" data-act="markNa" data-o="'+o.id+'" data-i="'+it.id+'">нет</button>':'')+'</div>';
+}
+function leftBox(o,c){
+  if(!c.paid||!['paid','buying','check'].includes(o.status)||!c.bought)return '';const cur=o.currency||'RUB';
+  const bad=c.left<-0.009;
+  return '<div class="box '+(bad?'bad':c.left<c.todoSum?'warn':'good')+'">Выкуплено на <b>'+money(c.boughtGoods,cur)+'</b>'+(+o.commission?' (+'+nf.format(+o.commission)+'% и упаковка = '+nf.format(c.spent)+')':'')+'<br>'+(bad?'⚠ Перерасход: <b>'+money(-c.left,cur)+'</b> — клиент должен доплатить':'Осталось от оплаты: <b>'+money(c.left,cur)+'</b>')+(c.todo?'<br><span class="muted">Ещё к выкупу: '+c.todo+' поз.'+(c.todoSum?' на '+nf.format(c.todoSum):'')+'</span>':'')+'</div>';
 }
 function renderOrder(o){
   const c=calc(o),cur=o.currency||'RUB',flow=FLOW[o.type||'fabric'],si=flow.indexOf(o.status);
@@ -375,6 +419,7 @@ function renderOrder(o){
     '<div class="steps">'+flow.map((s,i)=>'<button class="step'+(i<si?' done':'')+(i===si?' cur':'')+'" data-act="setStatus" data-id="'+o.id+'" data-v="'+s+'">'+(i<si?'✓ ':'')+ST[s].t+'</button>').join('')+'</div>'+
     (NEXT[o.status]?'<div class="btns"><button class="btn primary" data-act="nextStatus" data-id="'+o.id+'">→ '+esc(typeof NEXT[o.status]==='string'?NEXT[o.status]:NEXT[o.status][o.type||'fabric'])+'</button></div>':'')+'</div>';
   h+='<div class="money"><div class="card"><div class="l">Итого</div><div class="v">'+nf.format(c.total)+'</div></div><div class="card"><div class="l">Оплачено</div><div class="v pos">'+nf.format(c.paid)+'</div></div><div class="card"><div class="l">'+(c.balance<-0.009?'Долг клиента':c.balance>0.009?'Переплата':'Баланс')+'</div><div class="v '+(c.balance<-0.009?'neg':c.balance>0.009?'pos':'')+'">'+(c.balance<-0.009?'−':'')+nf.format(Math.abs(c.balance))+'</div></div></div>';
+  h+=leftBox(o,c);
   h+='<div class="btns two"><button class="btn primary" data-act="invoice" data-id="'+o.id+'">📄 Счёт-фактура</button><button class="btn" data-act="addPay" data-id="'+o.id+'">+ Платёж</button></div>';
   // items
   h+='<h2>Товар · '+c.n+' '+plural(c.n,'позиция','позиции','позиций')+'<span>выкуплено '+c.bought+' из '+c.n+'</span></h2>';
@@ -389,6 +434,8 @@ function renderOrder(o){
   h+='<h2>Платежи клиента<span>'+money(c.paid,cur)+'</span></h2>'+(c.pays.length?'<div class="list">'+c.pays.map(p=>'<button class="row" data-act="editPay" data-o="'+o.id+'" data-p="'+p.id+'"><div class="grow"><div class="t">'+esc(p.method||'Платёж')+(p.kind==='delivery'?' · за доставку':'')+'</div><div class="s">'+fmtD(p.date)+(p.cur&&p.cur!==cur?' · '+nf.format(+p.amount)+' '+CUR[p.cur].w+' по курсу '+numS(p.rate):'')+(p.note?' · '+esc(p.note):'')+'</div></div><div class="amt pos">+'+money((+p.amount||0)*(+p.rate||1),cur)+'</div></button>').join('')+'</div>':'<div class="card empty" style="padding:16px">Платежей ещё нет</div>');
   if(isOwner()&&c.goods){h+='<h2>Наш доход<span>видит только владелец</span></h2><div class="card tot"><div class="kv"><span>Комиссия</span><b>'+money(c.commission,cur)+'</b></div><div class="kv"><span>Наценка на товар</span><b>'+money(c.markup,cur)+'</b></div><div class="kv big"><span>Всего</span><b class="pos">'+money(c.profit,cur)+'</b></div></div>';}
   if(cl&&(cl.recipient||cl.phone))h+='<h2>Получатель (для мешка)</h2><div class="card" style="white-space:pre-wrap;font-size:18px;line-height:1.4">'+esc(cl.recipient||[cl.name,cl.city,cl.phone].filter(Boolean).join('\n'))+'</div>';
+  h+=shipSection(o,c);
+  h+='<div class="btns two" style="margin-top:22px"><button class="btn" data-act="shareText" data-id="'+o.id+'">💬 Текст для клиента</button><button class="btn" data-act="repeatOrder" data-id="'+o.id+'">🔁 Повторить заказ</button></div>';
   if(o.note)h+='<h2>Заметка</h2><div class="card" style="white-space:pre-wrap">'+esc(o.note)+'</div>';
   h+='<div class="btns" style="margin-top:24px"><button class="btn danger" data-act="delOrder" data-id="'+o.id+'">Удалить заказ</button></div>';
   h+='<div class="hint" style="text-align:center">'+(o.updatedBy?'Изменено: '+esc(staffName(o.updatedBy))+', '+new Date(o.updatedAt).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'')+'</div>';
@@ -406,10 +453,13 @@ function renderBuy(){
   const total=[];os.filter(o=>ui.buyOrder==='all'||o.id===ui.buyOrder).forEach(o=>itemsOf(o).forEach(it=>{if(it.status!=='na')total.push(it);}));
   const done=total.filter(isDone).length;
   h+='<div class="card" style="display:flex;align-items:center;gap:12px"><div class="grow"><div class="t">Выкуплено '+done+' из '+total.length+'</div><div style="height:8px;border-radius:4px;background:var(--chip);margin-top:8px;overflow:hidden"><i style="display:block;height:100%;width:'+(total.length?done/total.length*100:0).toFixed(1)+'%;background:var(--green)"></i></div></div><button class="btn small" data-act="buyToggle">'+(ui.buyShowDone?'Скрыть выкупленное':'Показать всё')+'</button></div>';
+  const vis=os.filter(o=>ui.buyOrder==='all'||o.id===ui.buyOrder);
+  const money_=vis.map(o=>{const c=calc(o);if(!c.paid)return '';const cur=o.currency||'RUB',bad=c.left<-0.009;return '<button class="row" data-act="openOrder" data-id="'+o.id+'" style="min-height:50px"><div class="grow"><div class="t ell">№'+esc(o.num)+' '+esc(o.clientName||'')+'</div><div class="s">оплачено '+nf.format(c.paid)+' · выкуплено на '+nf.format(c.spent)+'</div></div><div class="amt '+(bad?'neg':'pos')+'">'+(bad?'−':'')+nf.format(Math.abs(c.left))+'<small class="muted">'+(bad?'перерасход':'осталось')+'</small></div></button>';}).filter(Boolean);
+  if(money_.length)h+='<h2>Деньги клиентов на закуп</h2><div class="list">'+money_.join('')+'</div>';
   if(!rows.length)return h+'<div class="card empty" style="margin-top:12px"><div class="e">✅</div>Всё выкуплено!</div>';
   const gs={},order_=[];rows.forEach(r=>{const g=(r.it.group||'').trim()||'Без группы';if(!gs[g]){gs[g]=[];order_.push(g);}gs[g].push(r);});
-  h+='<div class="list" style="margin-top:12px">'+order_.map(g=>'<div class="grp">'+esc(g)+'<span>'+gs[g].length+' поз.</span></div>'+gs[g].map(r=>itemRow(r.o,r.it,ui.buyOrder==='all')).join('')).join('')+'</div>';
-  h+='<div class="hint">Группа — это ряд или поставщик, как пустые строки-разделители в старой таблице. Её задают в позиции.</div>';
+  h+='<div class="list" style="margin-top:12px">'+order_.map(g=>'<div class="grp">'+esc(g)+'<span>'+gs[g].length+' поз.</span></div>'+gs[g].map(r=>itemRow(r.o,r.it,ui.buyOrder==='all',true)).join('')).join('')+'</div>';
+  h+='<div class="hint">Кружок — выкуплено. «нет» — товара нет в наличии (не попадёт в счёт). Группа — контейнер или ряд, задаётся при вводе.</div>';
   return h;
 }
 
@@ -453,6 +503,7 @@ function drawSheet(isNew){
   curSave=cfg.onSave?async(extra)=>{const r=await cfg.onSave(extra);if(r!==false&&r!=='stay')popSheet();}:null;
   $('#sheet').classList.add('open');
   if(isNew){p.scrollTop=0;if(!wasOpen){p.classList.remove('anim');void p.offsetWidth;p.classList.add('anim');}}
+  hydratePhotos(p);
   if(cfg.onOpen)cfg.onOpen(p);
 }
 const F={
@@ -507,12 +558,14 @@ function itemForm(oid,iid,preset){return ()=>{
   const o=order(oid);if(!o)return null;const it=iid?(o.items||{})[iid]:null;if(iid&&!it)return null;const cur=o.currency||'RUB';
   const d=it?Object.assign({},it):Object.assign({name:'',group:'',req:'',qty:null,unit:o.type==='cosm'?'шт':'м',price:null,priceSup:null,status:o.type==='cosm'&&['buying','check'].includes(o.status)?'bought':'req',note:''},preset||{});
   const supSame=d.priceSup==null||d.priceSup===''||+d.priceSup===+d.price;
+  formPhoto={oid,val:d.photo||null,orig:d.photo||null};
   const cosm=o.type==='cosm';const moreOpen=!!it&&(!supSame||!!d.note||d.status==='na'||(cosm&&!!d.group));
   return {title:it?'Позиция':'Новая позиция',saveLabel:'Готово',body:
     F.text('f_nm','Наименование',d.name,cosm?'Например: Дезодорант':'Например: Муслин вишня','list="dlNames" autocapitalize="sentences" autocomplete="off"')+F.dl('dlNames',allNames())+
     (cosm?'':F.text('f_grp','Группа / ряд / поставщик',d.group,'Например: Муслин, ряд 12','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.text('f_req','Что просил клиент',d.req,'Например: 1 рулон'))+F.dl('dlGroups',allGroups())+
     '<div class="three-col"><div>'+F.numf('f_qty','Кол-во',d.qty,cosm?'4':'51')+'</div><div><label class="fl" for="f_unit">Ед.</label><select class="field" id="f_unit">'+UNITS.map(u=>'<option'+(u===d.unit?' selected':'')+'>'+u+'</option>').join('')+'</select></div><div>'+F.numf('f_pr','Цена, '+CUR[cur].s,d.price,cosm?'190':'160')+'</div></div>'+
     '<div class="box" id="sumBox"></div>'+
+    '<div class="phbox"><button class="big" data-act="itemPhotoPick" id="f_phbig">'+(d.photo?'<img data-ph="'+d.photo+'" alt="">':'📷')+'</button><div class="grow"><button class="btn small" data-act="itemPhotoPick">'+(d.photo?'Заменить фото':'Добавить фото')+'</button>'+(d.photo?' <button class="btn small danger" data-act="itemPhotoDel" style="margin-top:6px">Убрать</button>':'')+'<div class="hint" style="margin:6px 2px 0">Снимок товара с ценником — видно при сверке</div></div></div>'+
     '<details class="more"'+(moreOpen?' open':'')+'><summary>Ещё: '+(cosm?'контейнер, ':'')+'цена поставщика, статус, заметка</summary>'+
     (cosm?F.text('f_grp','Контейнер / ряд / поставщик',d.group,'Например: ряд 5','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.text('f_req','Что просил клиент',d.req,'Например: 2 шт по 25'):'')+
     '<label class="fl" style="display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text);font-weight:500"><input type="checkbox" id="f_supsame" '+(supSame?'checked':'')+' style="width:22px;height:22px;accent-color:var(--accent)"> Цена поставщика такая же</label>'+
@@ -533,7 +586,8 @@ function itemForm(oid,iid,preset){return ()=>{
     onSave:(more)=>{
       const name=val('f_nm');if(!name){shakeEl('f_nm');return false;}
       const price=num(val('f_pr'));const same=$('#f_supsame').checked;
-      const rec={name,group:val('f_grp'),req:val('f_req'),qty:num(val('f_qty')),unit:val('f_unit'),price:price==null?0:price,priceSup:same?(price==null?null:price):num(val('f_sup')),status:chipVal('st')||'req',note:val('f_note')};
+      const rec={name,group:val('f_grp'),req:val('f_req'),qty:num(val('f_qty')),unit:val('f_unit'),price:price==null?0:price,priceSup:same?(price==null?null:price):num(val('f_sup')),status:chipVal('st')||'req',note:val('f_note'),photo:formPhoto?formPhoto.val:null};
+      if(formPhoto&&formPhoto.orig&&formPhoto.orig!==formPhoto.val)delPhoto(formPhoto.orig);
       if(it){const p={};for(const k in rec)p['items.'+iid+'.'+k]=rec[k];DB.update('orders',oid,p);toast('Сохранено');}
       else{const nid=uid();const maxOrd=itemsOf(o).reduce((m,i)=>Math.max(m,i.ord||0),0);rec.ord=maxOrd+1;rec.created=Date.now();DB.update('orders',oid,{['items.'+nid]:rec});
         if(more==='more'){toast('Добавлено: '+name);popSheet();pushSheet(itemForm(oid,null,{group:rec.group,unit:rec.unit,status:rec.status}));return 'stay';}toast('Позиция добавлена');}
@@ -550,7 +604,7 @@ function quickAddForm(oid){return ()=>{
     F.text('q_grp','',b.group,cosm?'Контейнер / ряд (необязательно)':'Группа / поставщик (необязательно)','list="dlGroups" autocomplete="off" autocapitalize="sentences"')+F.dl('dlGroups',allGroups())+
     '<div style="display:flex;gap:8px;margin-top:8px;align-items:center"><select class="field" id="q_unit" style="width:90px;flex:none">'+UNITS.map(u=>'<option'+(u===b.unit?' selected':'')+'>'+u+'</option>').join('')+'</select>'+
     '<div class="chips" data-name="qst" style="flex-wrap:nowrap;flex:1;gap:6px">'+[['bought','✓ Выкуплено'],['req',cosm?'Заказано':'Без метража']].map(o=>'<button type="button" class="chip'+(b.status===o[0]?' on':'')+'" data-v="'+o[0]+'" style="flex:1;padding:0 8px;font-size:15px;white-space:nowrap">'+o[1]+'</button>').join('')+'</div></div></div>'+
-    '<div class="qrow" style="margin-top:14px"><input class="field" id="q_nm" placeholder="Название" list="dlNames" autocomplete="off" autocapitalize="sentences" enterkeyhint="next"><input class="field" id="q_qty" placeholder="Кол." inputmode="decimal" autocomplete="off" enterkeyhint="next"><input class="field" id="q_pr" placeholder="Цена" inputmode="decimal" autocomplete="off" enterkeyhint="done"><button class="addbtn" data-act="qAdd" aria-label="Добавить">+</button></div>'+F.dl('dlNames',allNames())+
+    '<div class="qrow cam" style="margin-top:14px"><input class="field" id="q_nm" placeholder="Название" list="dlNames" autocomplete="off" autocapitalize="sentences" enterkeyhint="next"><input class="field" id="q_qty" placeholder="Кол." inputmode="decimal" autocomplete="off" enterkeyhint="next"><input class="field" id="q_pr" placeholder="Цена" inputmode="decimal" autocomplete="off" enterkeyhint="done"><button class="qcam" data-act="qPhoto" id="q_cam" aria-label="Фото">'+(b.nextPhoto?'<img data-ph="'+b.nextPhoto+'" alt="">':'📷')+'</button><button class="addbtn" data-act="qAdd" aria-label="Добавить">+</button></div>'+F.dl('dlNames',allNames())+
     '<div class="hint">Название → Кол-во → Цена → Enter. Цену можно не писать — внесёте потом в «Цены по накладной».</div>'+
     '<h2 id="q_info" style="margin-top:16px"></h2><div class="list" id="q_list"></div>'+
     '<button class="save" data-act="closeSheet">Готово</button>',
@@ -569,7 +623,7 @@ function drawQList(){
   const sum=b.added.reduce((s,a)=>s+(a.qty||0)*(a.price||0),0);
   $('#q_info').innerHTML=b.added.length?'Добавлено '+b.added.length+'<span>'+money(sum,cur)+'</span>':'';
   $('#q_list').style.display=b.added.length?'':'none';
-  $('#q_list').innerHTML=b.added.map(a=>'<div class="qitem"><div class="grow"><div class="t" style="font-weight:600">'+esc(a.name)+'</div><div class="s" style="margin:0">'+(a.qty?nf.format(a.qty)+' '+esc(a.unit):'? '+esc(a.unit))+' × '+(a.price?nf.format(a.price):'цена потом')+(a.group?' · '+esc(a.group):'')+'</div></div><div class="amt">'+(a.qty&&a.price?nf.format(r2(a.qty*a.price)):'')+'</div><button class="xb" data-act="qDel" data-i="'+a.id+'" aria-label="Убрать">×</button></div>').join('');
+  $('#q_list').innerHTML=b.added.map(a=>'<div class="qitem">'+(a.photo?'<div class="th" style="width:38px;height:38px"><img src="'+(photoCache[a.photo]||'')+'" alt=""></div>':'')+'<div class="grow"><div class="t" style="font-weight:600">'+esc(a.name)+'</div><div class="s" style="margin:0">'+(a.qty?nf.format(a.qty)+' '+esc(a.unit):'? '+esc(a.unit))+' × '+(a.price?nf.format(a.price):'цена потом')+(a.group?' · '+esc(a.group):'')+'</div></div><div class="amt">'+(a.qty&&a.price?nf.format(r2(a.qty*a.price)):'')+'</div><button class="xb" data-act="qDel" data-i="'+a.id+'" aria-label="Убрать">×</button></div>').join('');
 }
 function qAdd(){
   const b=ui.batch,o=order(qctx.oid);if(!b||!o)return;
@@ -578,8 +632,8 @@ function qAdd(){
   b.group=val('q_grp');b.unit=$('#q_unit').value;b.status=chipVal('qst')||'req';
   let status=b.status;if(status==='bought'&&!qty)status='req';if(status==='req'&&qty&&o.type!=='cosm')status='res';
   const nid=uid(),ord=itemsOf(o).reduce((m,i)=>Math.max(m,i.ord||0),0)+1;
-  DB.update('orders',o.id,{['items.'+nid]:{name,group:b.group,req:'',qty,unit:b.unit,price:price==null?0:price,priceSup:price==null?null:price,status,note:'',ord,created:Date.now()}});
-  b.added.unshift({id:nid,name,qty,price,unit:b.unit,group:b.group});
+  DB.update('orders',o.id,{['items.'+nid]:{name,group:b.group,req:'',qty,unit:b.unit,price:price==null?0:price,priceSup:price==null?null:price,status,note:'',ord,created:Date.now(),photo:b.nextPhoto||null}});
+  b.added.unshift({id:nid,name,qty,price,unit:b.unit,group:b.group,photo:b.nextPhoto||null});b.nextPhoto=null;const qc=$('#q_cam');if(qc)qc.innerHTML='📷';
   nm.value='';$('#q_qty').value='';$('#q_pr').value='';nm.focus();
   if(navigator.vibrate)navigator.vibrate(10);drawQList();
 }
@@ -690,6 +744,98 @@ function staffForm(){return ()=>{const st=S();const staff=Object.assign({},st.st
     if(!no.length){alert('Должен остаться хотя бы один владелец');return false;}if(mode==='cloud'&&!no.includes(me.email)&&!confirm('Вы снимаете с себя роль владельца. Продолжить?'))return false;
     DB.update('meta','settings',{staff:ns,owners:no});toast('Сохранено');}};};}
 
+/* ---- shipment ---- */
+const CARRIERS=['Альфа карго','ДПД','СДЭК','Другое'];
+const placesW=s=>{const n=+s.places||0,k=s.kind||'мешок';return k==='коробка'?plural(n,'коробка','коробки','коробок'):plural(n,'мешок','мешка','мешков');};
+function shipSection(o,c){
+  const s=o.ship,cur=o.currency||'RUB';
+  if(!s){return ['buying','check','shipped','paid'].includes(o.status)?'<h2>Отправка</h2><div class="btns" style="margin-top:0"><button class="btn" data-act="editShip" data-id="'+o.id+'">📦 Оформить отправку</button></div>':'';}
+  return '<h2>Отправка</h2><button class="card tot" style="display:block;width:100%;text-align:left" data-act="editShip" data-id="'+o.id+'">'+
+    '<div class="kv"><span>'+esc(s.carrier||'Карго')+'</span><b>'+(s.places?s.places+' '+placesW(s):'')+(s.weight?' · '+nf.format(+s.weight)+' кг':'')+'</b></div>'+
+    (s.waybill?'<div class="kv"><span>Накладная</span><b>№ '+esc(s.waybill)+'</b></div>':'')+
+    '<div class="kv"><span>Доставка в счёте клиента</span><b>'+(c.delivery?money(c.delivery,cur):'—')+'</b></div>'+
+    (+s.ourCost?'<div class="kv"><span>Мы платим карго</span><b class="'+(s.ourPaid?'pos':'neg')+'">'+money(+s.ourCost,s.ourCur||cur)+(s.ourPaid?' ✓ оплачено':' · не оплачено')+'</b></div>':'')+
+    (s.photo?'<div class="kv"><span>Фото накладной</span><b style="color:var(--accent)">открыть ›</b></div>':'')+'</button>'+
+    (s.photo?'<div class="btns two"><button class="btn small" style="width:100%" data-act="viewShipPhoto" data-id="'+o.id+'">🧾 Фото накладной</button>'+(+s.ourCost&&!s.ourPaid?'<button class="btn small green" style="width:100%" data-act="cargoPaid" data-id="'+o.id+'">Карго оплачено</button>':'<span></span>')+'</div>':(+s.ourCost&&!s.ourPaid?'<div class="btns"><button class="btn green" data-act="cargoPaid" data-id="'+o.id+'">✓ Мы оплатили карго</button></div>':''));
+}
+let shipPhoto=null;
+function shipForm(oid){return ()=>{
+  const o=order(oid);if(!o)return null;const cur=o.currency||'RUB';const s=Object.assign({carrier:o.type==='cosm'?'ДПД':'Альфа карго',places:1,kind:o.type==='cosm'?'коробка':'мешок',weight:null,waybill:'',ourCost:null,ourCur:'KGS',ourPaid:false,photo:null,date:today()},o.ship||{});
+  shipPhoto={val:s.photo,orig:s.photo};
+  return {title:'Отправка',saveLabel:'Готово',body:
+    F.chips('car','Перевозчик',CARRIERS,CARRIERS.includes(s.carrier)?s.carrier:'Другое')+
+    '<label class="fl">Сколько мест</label><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div class="stepper"><button type="button" data-act="plMinus">−</button><div class="v" id="pl_v">'+(+s.places||1)+'</div><button type="button" data-act="plPlus">+</button></div>'+F.chips('kind','',[['мешок','мешки'],['коробка','коробки']],s.kind)+'</div>'+
+    '<div class="two-col"><div>'+F.numf('sh_w','Вес, кг',s.weight,'Необязательно')+'</div><div>'+F.text('sh_wb','Номер накладной',s.waybill,'Из 1С карго')+'</div></div>'+
+    '<div class="phbox"><button class="big" data-act="shipPhotoPick" id="sh_phbig">'+(s.photo?'<img data-ph="'+s.photo+'" alt="">':'🧾')+'</button><div class="grow"><button class="btn small" data-act="shipPhotoPick">'+(s.photo?'Заменить фото накладной':'Сфотографировать накладную')+'</button><div class="hint" style="margin:6px 2px 0">Потом её можно переслать клиенту</div></div></div>'+
+    F.numf('sh_del','Доставка для клиента (в счёт), '+CUR[cur].s,o.delivery||'','Сумма из накладной')+
+    '<label class="fl">Сколько платим карго мы</label><div class="two-col"><div>'+F.numf('sh_oc','',s.ourCost,'Сумма')+'</div><div>'+F.chips('ocur','',[['RUB','руб'],['KGS','сом']],s.ourCur||'KGS')+'</div></div>'+
+    F.chips('opaid','',[['no','Ещё не оплатили'],['yes','✓ Оплатили']],s.ourPaid?'yes':'no')+
+    F.date('sh_d','Дата отправки',s.date)+
+    '<button class="save" data-act="sheetSave">Сохранить</button>'+(o.ship?'<div class="btns"><button class="btn danger" data-act="delShip" data-id="'+oid+'">Удалить отправку</button></div>':''),
+    onSave:()=>{const ship={carrier:chipVal('car'),places:+$('#pl_v').textContent||1,kind:chipVal('kind')||'мешок',weight:num(val('sh_w')),waybill:val('sh_wb'),photo:shipPhoto.val||null,ourCost:num(val('sh_oc')),ourCur:chipVal('ocur')||'KGS',ourPaid:chipVal('opaid')==='yes',date:val('sh_d')||today()};
+      if(shipPhoto.orig&&shipPhoto.orig!==shipPhoto.val)delPhoto(shipPhoto.orig);
+      const p={ship,delivery:num(val('sh_del'))||0};
+      if(['paid','buying','check'].includes(o.status)&&confirm('Перевести заказ в статус «Отправлен»?'))p.status='shipped';
+      DB.update('orders',oid,p);toast('Отправка сохранена');}};
+};}
+/* ---- cash ---- */
+function renderCash(){
+  const os=orders();const byCur={};const owner=isOwner();
+  const ensure=c=>byCur[c]||(byCur[c]={paid:0,spentGoods:0,cargo:0,left:0,todo:0,comm:0,debt:0,over:0,n:0});
+  const cargoDue=[],debts=[],overs=[];
+  os.forEach(o=>{const cur=o.currency||'RUB',c=calc(o);
+    if(o.ship&&+o.ship.ourCost>0&&!o.ship.ourPaid)cargoDue.push({o,c});
+    if(o.status==='pick')return;
+    if(c.balance<-0.009)debts.push({o,c});else if(c.balance>0.009&&o.status!=='closed')overs.push({o,c});
+    if(o.status==='closed')return;
+    const b=ensure(cur);b.n++;b.paid+=c.paid;
+    let sup=0;c.items.forEach(it=>{if(isDone(it))sup+=(+it.qty||0)*(it.priceSup!=null&&it.priceSup!==''?+it.priceSup:+it.price||0);});
+    b.spentGoods+=sup;if(o.ship&&o.ship.ourPaid&&(o.ship.ourCur||cur)===cur)b.cargo+=+o.ship.ourCost||0;
+    b.todo+=c.todoSum;b.comm+=Math.round(c.boughtGoods*(+o.commission||0)/100)+(c.boughtGoods-sup);
+  });
+  let h='<h1>Касса</h1>'+demoBanner();
+  const curs=Object.keys(byCur);
+  if(!curs.length)h+='<div class="card empty"><div class="e">💰</div>Здесь будет видно, сколько денег клиентов сейчас у вас на руках, кто должен и за какое карго ещё не заплатили.</div>';
+  curs.forEach(cur=>{const b=byCur[cur];const left=r2(b.paid-b.spentGoods-b.cargo);
+    h+='<div class="card cashcard" style="margin-top:8px"><div class="s" style="margin:0">Деньги клиентов на руках · '+(cur==='RUB'?'заказы в рублях':'заказы в сомах')+'</div><div class="big '+(left<0?'neg':'')+'">'+(left<0?'−':'')+money(Math.abs(left),cur)+'</div>'+
+      '<div class="tot" style="margin-top:8px"><div class="kv"><span>Получено от клиентов</span><b>'+money(b.paid,cur)+'</b></div><div class="kv"><span>Отдали поставщикам за выкупленное</span><b>−'+money(b.spentGoods,cur)+'</b></div>'+(b.cargo?'<div class="kv"><span>Оплатили карго</span><b>−'+money(b.cargo,cur)+'</b></div>':'')+
+      (b.todo?'<div class="kv"><span>Ещё предстоит выкупить</span><b>'+money(b.todo,cur)+'</b></div>':'')+(owner&&b.comm?'<div class="kv"><span>Из них наш доход (комиссия + наценка)</span><b class="pos">'+money(b.comm,cur)+'</b></div>':'')+'</div>'+
+      '<div class="hint" style="margin:6px 0 0">По '+b.n+' незакрытым '+plural(b.n,'заказу','заказам','заказам')+'. Платежи в другой валюте пересчитаны по курсу из платежа.</div></div>';});
+  if(cargoDue.length){const tot={};cargoDue.forEach(x=>{const k=x.o.ship.ourCur||'KGS';tot[k]=(tot[k]||0)+ +x.o.ship.ourCost;});
+    h+='<h2>Карго к оплате<span>'+Object.keys(tot).map(k=>money(tot[k],k)).join(' + ')+'</span></h2><div class="list">'+cargoDue.map(x=>'<div class="row"><button class="grow" style="text-align:left" data-act="openOrder" data-id="'+x.o.id+'"><div class="t ell">'+esc(ordTitle(x.o))+'</div><div class="s">'+esc(x.o.ship.carrier||'')+(x.o.ship.waybill?' · № '+esc(x.o.ship.waybill):'')+(x.o.ship.date?' · '+fmtD(x.o.ship.date):'')+'</div></button><div class="amt neg">'+money(+x.o.ship.ourCost,x.o.ship.ourCur||'KGS')+'</div><button class="badge g" style="padding:8px 10px;font-size:13px" data-act="cargoPaid" data-id="'+x.o.id+'">оплачено</button></div>').join('')+'</div>';}
+  if(debts.length){h+='<h2>Клиенты должны</h2><div class="list">'+debts.sort((a,b)=>a.c.balance-b.c.balance).map(x=>'<button class="row" data-act="openOrder" data-id="'+x.o.id+'"><div class="grow"><div class="t ell">'+esc(ordTitle(x.o))+'</div><div class="s">'+ST[x.o.status].t+(x.o.status==='shipped'&&x.c.delivery?' · за доставку':'')+'</div></div><div class="amt neg">'+money(-x.c.balance,x.o.currency||'RUB')+'</div></button>').join('')+'</div>';}
+  if(overs.length){h+='<h2>Переплаты клиентов (их деньги у нас)</h2><div class="list">'+overs.map(x=>'<button class="row" data-act="openOrder" data-id="'+x.o.id+'"><div class="grow"><div class="t ell">'+esc(ordTitle(x.o))+'</div><div class="s">'+ST[x.o.status].t+'</div></div><div class="amt pos">'+money(x.c.balance,x.o.currency||'RUB')+'</div></button>').join('')+'</div>';}
+  const since=new Date();since.setDate(since.getDate()-7);const sinceS=isoDate(since);
+  const pays=[];os.forEach(o=>paysOf(o).forEach(p=>{if((p.date||'')>=sinceS)pays.push({o,p});}));
+  if(pays.length){pays.sort((a,b)=>(b.p.date||'').localeCompare(a.p.date||'')||(b.p.created||0)-(a.p.created||0));
+    h+='<h2>Поступления за 7 дней</h2><div class="list">'+pays.slice(0,40).map(x=>'<button class="row" data-act="openOrder" data-id="'+x.o.id+'"><div class="grow"><div class="t ell">'+esc(x.o.clientName||'')+' · №'+esc(x.o.num)+'</div><div class="s">'+fmtD(x.p.date)+' · '+esc(x.p.method||'')+(x.p.kind==='delivery'?' · доставка':'')+'</div></div><div class="amt pos">+'+money(+x.p.amount,x.p.cur||x.o.currency||'RUB')+'</div></button>').join('')+'</div>';}
+  return h;
+}
+/* ---- text for messenger & repeat ---- */
+function orderText(o){
+  const c=calc(o),cur=o.currency||'RUB',w=CUR[cur].w,N=v=>nf.format(r2(v));
+  const L=['Счёт-фактура №'+o.num+' от '+fmtD(o.date)+(o.clientName?' · '+o.clientName:''),'','Сумма товара: '+N(c.goods)+' '+w];
+  if(c.packing)L.push('Упаковка / тачка / отправка: '+N(c.packing)+' '+w);
+  if(c.commission)L.push('Комиссия '+nf.format(+o.commission)+'%: '+N(c.commission)+' '+w);
+  if(c.delivery)L.push('Доставка / погрузка / пресс: '+N(c.delivery)+' '+w);
+  L.push('ИТОГО: '+N(c.total)+' '+w,'');
+  if(c.paid)L.push('Оплачено: '+N(c.paid)+' '+w);
+  L.push(c.balance<-0.009?'К ОПЛАТЕ: '+N(-c.balance)+' '+w:c.balance>0.009?'Переплата: '+N(c.balance)+' '+w:'Оплачено полностью ✅');
+  if(o.ship&&o.ship.carrier)L.push('','Отправка: '+o.ship.carrier+(o.ship.places?', '+o.ship.places+' '+placesW(o.ship):'')+(o.ship.waybill?', накладная № '+o.ship.waybill:''));
+  const st=S();if(st.brand)L.push('',st.brand);
+  return L.join('\n');
+}
+async function shareText(txt){
+  try{if(navigator.share){await navigator.share({text:txt});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+  try{await navigator.clipboard.writeText(txt);toast('Текст скопирован — вставьте в чат');}catch(e){prompt('Скопируйте текст:',txt);}
+}
+function repeatOrder(o){
+  const nid=uid(),items={};let k=0;const cosm=o.type==='cosm';
+  itemsOf(o).forEach(it=>{if(it.status==='na')return;k++;items[uid()]={name:it.name,group:it.group||'',req:cosm?'':(it.req||(it.qty?nf.format(+it.qty)+' '+(it.unit||''):'')),qty:cosm?it.qty:null,unit:it.unit,price:+it.price||0,priceSup:it.priceSup!=null?it.priceSup:null,status:'req',note:'',ord:k,created:Date.now(),photo:it.photo||null};});
+  const num_=nextNum();
+  DB.set('orders',nid,{clientId:o.clientId||'',clientName:o.clientName||'',clientCity:o.clientCity||'',type:o.type,currency:o.currency,date:today(),commission:o.commission,packing:S().packing,manager:myName(),admin:o.admin||'',note:'',num:num_,status:'pick',items,payments:{},delivery:0,created:Date.now(),createdBy:me.email});
+  go(()=>{ui.page={type:'order',id:nid};});toast('Заказ №'+num_+' создан по образцу №'+o.num);
+}
 /* ============ invoice ============ */
 function wrapName(s,max){s=String(s||'');return s.length>max?s.slice(0,max-1)+'…':s;}
 function invoiceSVG(o){
@@ -707,7 +853,7 @@ function invoiceSVG(o){
   y=150;
   rect(40,y,400,28,T);txt(52,y+19,'ИНФОРМАЦИЯ',{size:13,w:700,fill:'#fff'});rect(460,y,400,28,T);txt(472,y+19,'ПОЛУЧАТЕЛЬ',{size:13,w:700,fill:'#fff'});
   const info=[['Менеджер',o.manager||'—'],['Админ',o.admin||'—'],['Товар',TYPES[o.type||'fabric']]];
-  const rcp=[['ФИО',o.clientName||'—'],['Город',o.clientCity||'—'],['Телефон',cl&&cl.phone||'—']];if(cl&&cl.bank)rcp.push(['Банк',cl.bank]);
+  const rcp=[['ФИО',o.clientName||'—'],['Город',o.clientCity||'—'],['Телефон',cl&&cl.phone||'—']];if(cl&&cl.bank)rcp.push(['Банк',cl.bank]);if(o.ship&&o.ship.carrier)rcp.push(['Отправка',o.ship.carrier+(o.ship.places?', '+o.ship.places+' '+placesW(o.ship):'')]);if(o.ship&&o.ship.waybill)rcp.push(['Накладная',o.ship.waybill]);
   const rows=Math.max(info.length,rcp.length);
   for(let i=0;i<rows;i++){const yy=y+28+i*28+19;if(info[i]){txt(52,yy,info[i][0]+':',{size:14,fill:MU});txt(160,yy,wrapName(info[i][1],30),{size:14,fill:T,w:600});}if(rcp[i]){txt(472,yy,rcp[i][0]+':',{size:14,fill:MU});txt(560,yy,wrapName(rcp[i][1],34),{size:14,w:600});}}
   y+=28+rows*28+18;
@@ -747,7 +893,7 @@ function invoiceSVG(o){
 let invOpen=null;
 function showInvoice(oid){invOpen=oid;refreshInvoice();$('#inv').classList.add('show');$('#inv').scrollTop=0;}
 function refreshInvoice(){if(!invOpen)return;const o=order(invOpen);if(!o){$('#inv').classList.remove('show');invOpen=null;return;}const r=invoiceSVG(o);
-  $('#inv').innerHTML='<div class="invbar noprint"><button data-act="closeInvoice">✕</button><div class="gap"></div><button class="pr" data-act="sharePng">📷 Картинка</button><button data-act="printInvoice">PDF</button></div><div class="invpage">'+r.svg+'</div>';}
+  $('#inv').innerHTML='<div class="invbar noprint"><button data-act="closeInvoice">✕</button><div class="gap"></div><button class="pr" data-act="sharePng">📷 Картинка</button><button data-act="shareTextInv">💬 Текст</button><button data-act="printInvoice">PDF</button></div><div class="invpage">'+r.svg+'</div>';}
 async function svgToPngBlob(svg,w,h,scale){
   const img=new Image();const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
   await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error('svg'));img.src=url;});
@@ -784,6 +930,21 @@ const A={
     if(nx==='closed'&&c.balance<-0.009&&!confirm('Клиент ещё должен '+nf.format(-c.balance)+'. Закрыть заказ всё равно?'))return;
     setStatus(o,nx);},
   addItem:d=>pushSheet(itemForm(d.id,null)),
+  viewItemPhoto:d=>{const o=order(d.o),it=(o.items||{})[d.i];if(!it||!it.photo)return;viewPhoto(it.photo,()=>{DB.update('orders',d.o,{['items.'+d.i+'.photo']:null});delPhoto(it.photo);});},
+  closePhoto:()=>{$('#pv').classList.remove('show');pvCtx=null;},
+  itemPhotoPick:()=>{if(!formPhoto)return;pickPhoto(formPhoto.oid,id=>{if(formPhoto.val&&formPhoto.val!==formPhoto.orig)delPhoto(formPhoto.val);formPhoto.val=id;const b=$('#f_phbig');if(b){b.innerHTML='<img src="'+photoCache[id]+'" alt="">';}toast('Фото добавлено — нажмите «Сохранить»');});},
+  itemPhotoDel:()=>{if(!formPhoto)return;formPhoto.val=null;const b=$('#f_phbig');if(b)b.innerHTML='📷';toast('Фото уберётся после «Сохранить»');},
+  qPhoto:()=>{const b=ui.batch;if(!b)return;pickPhoto(b.oid,id=>{if(b.nextPhoto)delPhoto(b.nextPhoto);b.nextPhoto=id;const qc=$('#q_cam');if(qc)qc.innerHTML='<img src="'+photoCache[id]+'" alt="">';const n=$('#q_nm');if(n)n.focus();});},
+  editShip:d=>pushSheet(shipForm(d.id)),
+  delShip:d=>{const o=order(d.id);if(!confirm('Удалить данные отправки?'))return;if(o.ship&&o.ship.photo)delPhoto(o.ship.photo);DB.update('orders',d.id,{ship:DEL});popSheet();},
+  plMinus:()=>{const v=$('#pl_v');v.textContent=Math.max(1,(+v.textContent||1)-1);},
+  plPlus:()=>{const v=$('#pl_v');v.textContent=(+v.textContent||0)+1;},
+  shipPhotoPick:()=>{pickPhoto(stack.length?'':'',id=>{if(shipPhoto.val&&shipPhoto.val!==shipPhoto.orig)delPhoto(shipPhoto.val);shipPhoto.val=id;const b=$('#sh_phbig');if(b)b.innerHTML='<img src="'+photoCache[id]+'" alt="">';},1400);},
+  viewShipPhoto:d=>{const o=order(d.id);if(o&&o.ship&&o.ship.photo)viewPhoto(o.ship.photo,null);},
+  cargoPaid:d=>{const o=order(d.id);if(!o||!o.ship)return;if(!confirm('Отметить: карго '+money(+o.ship.ourCost,o.ship.ourCur||'KGS')+' по заказу №'+o.num+' оплачено?'))return;DB.update('orders',d.id,{'ship.ourPaid':true,'ship.paidDate':today()});toast('Карго оплачено');},
+  shareText:d=>shareText(orderText(order(d.id))),
+  repeatOrder:d=>{const o=order(d.id);if(!confirm('Создать новый заказ для «'+(o.clientName||'')+'» с теми же товарами и ценами?'))return;repeatOrder(o);},
+  markNa:d=>{const o=order(d.o),it=(o.items||{})[d.i];if(!it)return;DB.update('orders',d.o,{['items.'+d.i+'.status']:'na'});toast('«'+it.name+'» — нет в наличии');},
   quickAdd:d=>pushSheet(quickAddForm(d.id)),
   qAdd:()=>qAdd(),
   qDel:d=>{const b=ui.batch;if(!b)return;DB.update('orders',b.oid,{['items.'+d.i]:DEL});b.added=b.added.filter(a=>a.id!==d.i);drawQList();toast('Убрано');},
@@ -791,19 +952,21 @@ const A={
   pricesMode:d=>pushSheet(pricesForm(d.id)),
   ppCheck:(d,el)=>{const it=(order(qctx.oid).items||{})[d.i];if(!it)return;const ns=it.status==='checked'?'bought':'checked';DB.update('orders',qctx.oid,{['items.'+d.i+'.status']:ns});el.classList.toggle('v2',ns==='checked');el.textContent=ns==='checked'?'✓✓':'✓';},
   editItem:d=>pushSheet(itemForm(d.o,d.i)),
-  delItem:d=>{if(!confirm('Удалить позицию?'))return;DB.update('orders',d.o,{['items.'+d.i]:DEL});popSheet();toast('Удалено');},
+  delItem:d=>{if(!confirm('Удалить позицию?'))return;const it=(order(d.o).items||{})[d.i];if(it&&it.photo)delPhoto(it.photo);DB.update('orders',d.o,{['items.'+d.i]:DEL});popSheet();toast('Удалено');},
   tick:d=>{const o=order(d.o);const it=(o.items||{})[d.i];if(!it)return;let ns;
     if(o.status==='check')ns=it.status==='checked'?'bought':'checked';
     else if(isDone(it))ns=(+it.qty?'res':'req');else{if(it.status==='na')ns=+it.qty?'res':'req';else ns='bought';}
     if(ns==='bought'&&!(+it.qty)){pushSheet(itemForm(d.o,d.i));toast('Сначала укажите количество');return;}
     DB.update('orders',d.o,{['items.'+d.i+'.status']:ns});if(navigator.vibrate)navigator.vibrate(12);
     if(ns==='bought'&&['paid','reserve'].includes(o.status))DB.update('orders',d.o,{status:'buying'});
-    const c=calc(order(d.o));if(ns==='bought'&&c.n&&c.bought===c.n)setTimeout(()=>toast('Всё выкуплено по заказу №'+o.num+' ✅'),400);},
+    const c=calc(order(d.o));if(ns==='bought'&&c.paid&&c.left<-0.009&&calc(o).left>=-0.009)setTimeout(()=>toast('⚠ №'+o.num+': деньги клиента закончились, перерасход '+nf.format(-c.left)),300);
+    else if(ns==='bought'&&c.n&&c.bought===c.n)setTimeout(()=>toast('Всё выкуплено по заказу №'+o.num+' ✅'),400);},
   editServices:d=>pushSheet(servicesForm(d.id)),
   addPay:d=>pushSheet(payForm(d.id,null)),
   editPay:d=>pushSheet(payForm(d.o,d.p)),
   delPay:d=>{if(!confirm('Удалить платёж?'))return;DB.update('orders',d.o,{['payments.'+d.p]:DEL});popSheet();toast('Удалено');},
   invoice:d=>showInvoice(d.id),
+  shareTextInv:()=>{const o=order(invOpen);if(o)shareText(orderText(o));},
   closeInvoice:()=>{invOpen=null;$('#inv').classList.remove('show');},
   printInvoice:()=>window.print(),
   sharePng:async()=>{const o=order(invOpen);if(!o)return;try{const r=invoiceSVG(o);const blob=await svgToPngBlob(r.svg,r.w,r.h,2);await shareBlob('Счёт №'+o.num+' '+(o.clientName||'')+'.png',blob);}catch(e){alert('Не удалось создать картинку: '+(e.message||e));}},
@@ -816,7 +979,7 @@ const A={
   editInvoiceSettings:()=>pushSheet(invoiceSettingsForm()),
   editDefaults:()=>pushSheet(defaultsForm()),
   editStaff:()=>pushSheet(staffForm()),
-  exportJson:async()=>{const data=JSON.stringify({app:'zakup',version:1,exported:new Date().toISOString(),orders:cache.orders,clients:cache.clients,meta:cache.meta},null,1);await shareBlob('zakup-'+today()+'.json',new Blob([data],{type:'application/json'}));},
+  exportJson:async()=>{const data=JSON.stringify({app:'zakup',version:1,exported:new Date().toISOString(),orders:cache.orders,clients:cache.clients,meta:cache.meta,photos:mode==='local'?(local.photos||{}):undefined},null,1);await shareBlob('zakup-'+today()+'.json',new Blob([data],{type:'application/json'}));},
   importJson:()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(d.app!=='zakup')throw new Error('это не копия «Закупа»');if(!confirm('Заменить данные на этом телефоне копией ('+Object.keys(d.orders||{}).length+' заказов)?'))return;local={orders:d.orders||{},clients:d.clients||{},meta:d.meta||{}};localSave();cache.orders=clone(local.orders);cache.clients=clone(local.clients);cache.meta=clone(local.meta);renderAll();toast('Загружено');}catch(e){alert('Не удалось загрузить: '+(e.message||e));}};inp.click();},
 };
 document.addEventListener('click',e=>{
