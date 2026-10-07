@@ -12,6 +12,30 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png">
 <title>Закуп</title>
+<script>
+/* Оформление: цвет и светлая/тёмная тема — своё на каждом телефоне */
+window.THEMES={
+  teal:{n:'Бирюза',L:{accent:'#2b8a97',accentbg:'#e1f1f3',bg:'#f2f4f5',chip:'#e5eaec'},D:{accent:'#4fb3c1',accentbg:'#0f2c31'}},
+  ocean:{n:'Океан',L:{accent:'#1d6fd8',accentbg:'#e2edfc',bg:'#f1f4f9',chip:'#e3e9f2'},D:{accent:'#5b9dff',accentbg:'#13233f'}},
+  indigo:{n:'Индиго',L:{accent:'#4f46e5',accentbg:'#e9e8fd',bg:'#f3f3f9',chip:'#e6e6f0'},D:{accent:'#8b85ff',accentbg:'#1f1d3d'}},
+  violet:{n:'Сирень',L:{accent:'#7c3aed',accentbg:'#efe6fe',bg:'#f6f3fa',chip:'#ebe5f3'},D:{accent:'#a78bfa',accentbg:'#261a40'}},
+  wine:{n:'Гранат',L:{accent:'#b4235a',accentbg:'#f9e2eb',bg:'#f8f3f5',chip:'#efe4e8'},D:{accent:'#ff6b9c',accentbg:'#3a1222'}},
+  terra:{n:'Терракота',L:{accent:'#c4552a',accentbg:'#f9e7de',bg:'#f8f4f1',chip:'#efe6e0'},D:{accent:'#ff8a5b',accentbg:'#3a1d10'}},
+  emerald:{n:'Изумруд',L:{accent:'#0b7a5e',accentbg:'#dcf1ea',bg:'#f1f5f3',chip:'#e2ebe7'},D:{accent:'#34c79d',accentbg:'#0d2b23'}},
+  graphite:{n:'Графит',L:{accent:'#262b33',accentbg:'#e7e9ec',bg:'#f3f3f4',chip:'#e7e7e9'},D:{accent:'#7b8494',accentbg:'#22262c'}}
+};
+window.THEME_NEU={
+  L:{card:'#fff',text:'#1b2124',muted:'#7c878c',line:'#e3e8ea',green:'#1f9d55',greenbg:'#e3f5ea',red:'#d93a2f',redbg:'#fde7e5',orange:'#c97a06',orangebg:'#fdf1dc',blue:'#2f6fdf',bluebg:'#e6eefc',shadow:'0 1px 2px rgba(0,0,0,.05)',bar:'rgba(255,255,255,.92)'},
+  D:{bg:'#000',card:'#1a1d1f',text:'#eef2f3',muted:'#94a0a5',line:'#2a2f32',green:'#30d158',greenbg:'#12301d',red:'#ff5a4e',redbg:'#3a1614',orange:'#ffa726',orangebg:'#3a2a0e',blue:'#5b93ff',bluebg:'#13233f',chip:'#2a2f32',shadow:'none',bar:'rgba(26,29,31,.92)'}
+};
+window.themeGet=function(){var t='teal',m='auto';try{t=localStorage.getItem('zakup_theme')||t;m=localStorage.getItem('zakup_mode')||m;}catch(e){}if(!THEMES[t])t='teal';return {t:t,m:m};};
+window.applyTheme=function(){var g=themeGet(),th=THEMES[g.t];var dark=g.m==='dark'||(g.m==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  var v={},k,src=[THEME_NEU[dark?'D':'L'],dark?th.D:th.L];src.forEach(function(o){for(k in o)v[k]=o[k];});
+  var r=document.documentElement.style;for(k in v)r.setProperty('--'+k,v[k]);r.colorScheme=dark?'dark':'light';
+  var ms=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<ms.length;i++)ms[i].setAttribute('content',v.bg);};
+applyTheme();
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);}catch(e){}
+</script>
 <style>
 :root{--bg:#f2f4f5;--card:#fff;--text:#1b2124;--muted:#7c878c;--line:#e3e8ea;--accent:#2b8a97;--accentbg:#e1f1f3;--green:#1f9d55;--greenbg:#e3f5ea;--red:#d93a2f;--redbg:#fde7e5;--orange:#c97a06;--orangebg:#fdf1dc;--blue:#2f6fdf;--bluebg:#e6eefc;--chip:#e5eaec;--shadow:0 1px 2px rgba(0,0,0,.05);--bar:rgba(255,255,255,.92)}
 @media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1a1d1f;--text:#eef2f3;--muted:#94a0a5;--line:#2a2f32;--accent:#4fb3c1;--accentbg:#0f2c31;--green:#30d158;--greenbg:#12301d;--red:#ff5a4e;--redbg:#3a1614;--orange:#ffa726;--orangebg:#3a2a0e;--blue:#5b93ff;--bluebg:#13233f;--chip:#2a2f32;--shadow:none;--bar:rgba(26,29,31,.92)}}
@@ -171,6 +195,14 @@ details.more[open]{padding-bottom:12px}
 .prow.head{padding-top:4px;padding-bottom:4px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;text-align:right}
 .prow.head div:first-child{text-align:left}
 .mkup{color:var(--pos,#1a7f45);font-weight:600}
+.thgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.thc{border-radius:16px;padding:12px;border:2px solid var(--line);text-align:left;box-shadow:var(--shadow)}
+.thc.on{border-color:var(--text)}
+.thc .sw{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.thc .dot{width:28px;height:28px;border-radius:50%}
+.thc .mb{height:26px;border-radius:8px;color:#fff;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.thc .mc{height:8px;border-radius:4px;margin-top:6px}
+.thc .nm{font-weight:700;margin-top:8px;font-size:15px}
 .invopts{display:flex;gap:8px;flex-wrap:wrap;width:100%}
 .invopts select{flex:1;min-width:140px;min-height:42px;border-radius:12px;border:none;background:#fff;color:#1f2a2d;font-size:15px;padding:0 10px}
 .invopts label{display:flex;align-items:center;gap:6px;font-size:14px;color:#1f2a2d;background:#fff;border-radius:12px;padding:0 12px;min-height:42px}
@@ -192,8 +224,8 @@ details.more[open]{padding-bottom:12px}
 .inv{position:fixed;inset:0;z-index:90;background:#e7ebec;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .inv.show{display:block}
 .invbar{position:sticky;top:0;display:flex;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;background:#e7ebec;z-index:2;flex-wrap:wrap}
-.invbar button{background:#fff;color:#2b8a97;font-weight:600;border-radius:12px;padding:0 14px;min-height:44px;font-size:15px}
-.invbar button.pr{background:#2b8a97;color:#fff}
+.invbar button{background:#fff;color:var(--accent);font-weight:600;border-radius:12px;padding:0 14px;min-height:44px;font-size:15px}
+.invbar button.pr{background:var(--accent);color:#fff}
 .invbar .gap{flex:1}
 .invpage{max-width:900px;margin:0 auto 40px;padding:0 8px}
 .invpage svg{width:100%;height:auto;display:block;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08)}
@@ -517,6 +549,7 @@ function renderMore(){
     rowBtn('editInvoiceSettings','📄','Счёт-фактура','Название, Instagram, телефон, подвал')+
     rowBtn('editDefaults','⚙️','По умолчанию','Комиссия '+nf.format(st.commission)+'%, упаковка '+nf.format(st.packing)+', курсы')+
     (isOwner()?rowBtn('editStaff','👥','Сотрудники','Имена в счёте и кто владелец'):'')+
+    rowBtn('editTheme','🎨','Оформление',THEMES[themeGet().t].n+' · '+{auto:'как в телефоне',light:'светлая',dark:'тёмная'}[themeGet().m])+
     '</div><h2>Данные</h2><div class="list">'+rowBtn('exportJson','💾','Скачать копию всех данных','Файл JSON на всякий случай')+
     (mode==='local'?rowBtn('importJson','📥','Загрузить копию','Из файла JSON'):'')+'</div>';
   if(mode==='cloud')h+='<div class="btns" style="margin-top:22px"><button class="btn danger" data-act="logout">Выйти</button></div>';
@@ -525,6 +558,12 @@ function renderMore(){
 }
 const rowBtn=(act,icon,t,s)=>'<button class="row" data-act="'+act+'"><div style="font-size:22px;width:30px;text-align:center">'+icon+'</div><div class="grow"><div class="t">'+t+'</div><div class="s">'+esc(s)+'</div></div><span class="chev">›</span></button>';
 
+function themeForm(){return ()=>{const g=themeGet();
+  const card=k=>{const th=THEMES[k];return '<button class="thc'+(g.t===k?' on':'')+'" data-act="setTheme" data-v="'+k+'" style="background:'+th.L.bg+'"><div class="sw"><span class="dot" style="background:'+th.L.accent+'"></span><span class="dot" style="background:'+th.D.accent+';width:18px;height:18px"></span></div><div class="mb" style="background:'+th.L.accent+'">Счёт-фактура</div><div class="mc" style="background:'+th.L.accentbg+'"></div><div class="nm" style="color:#1b2124">'+th.n+'</div></button>';};
+  return {title:'Оформление',body:'<label class="fl">Цвет</label><div class="thgrid">'+Object.keys(THEMES).map(card).join('')+'</div>'+
+    F.chips('thm','Светлая или тёмная',[['auto','Авто'],['light','☀️ Светлая'],['dark','🌙 Тёмная']],g.m)+
+    '<div class="hint">«Авто» — как в настройках iPhone. Меняется сразу. Настройка своя на каждом телефоне — жена может выбрать другой цвет. Счёт-фактура для клиентов остаётся в фирменных цветах.</div><button class="save" data-act="closeSheet">Готово</button>',
+    hooks:{thm:v=>{try{localStorage.setItem('zakup_mode',v);}catch(e){}applyTheme();renderMain();}}};};}
 /* ============ sheets ============ */
 const stack=[];let hooks={},curSave=null;
 function pushSheet(fn){stack.push(fn);drawSheet(true);}
@@ -1019,7 +1058,7 @@ function refreshInvoice(){if(!invOpen)return;const o=order(invOpen);if(!o){$('#i
     bar='<button data-act="closeInvoice">✕</button><div class="gap"></div><button class="pr" data-act="sharePdf">📤 PDF поставщику</button><button data-act="sharePng">📷</button>'+
       '<div class="invopts"><select id="so_f">'+[['all','Все позиции'],['done','Только выкупленные'],['todo','Ещё не выкуплены']].map(v=>'<option value="'+v[0]+'"'+(supOpt.f===v[0]?' selected':'')+'>'+v[1]+'</option>').join('')+'</select>'+
       (gs.length?'<select id="so_g"><option value="*">Все поставщики</option>'+gs.map(g=>'<option'+(supOpt.g===g?' selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+
-      '<label><input type="checkbox" id="so_c"'+(supOpt.cl?' checked':'')+' style="width:20px;height:20px;accent-color:#2b8a97">Клиент</label></div>';}
+      '<label><input type="checkbox" id="so_c"'+(supOpt.cl?' checked':'')+' style="width:20px;height:20px;accent-color:var(--accent)">Клиент</label></div>';}
   else bar='<button data-act="closeInvoice">✕</button><div class="gap"></div><button class="pr" data-act="sharePdf">📄 PDF</button><button data-act="sharePng">📷 Картинка</button><button data-act="shareTextInv">💬 Текст</button>';
   $('#inv').innerHTML='<div class="invbar noprint">'+bar+'</div><div class="invpage">'+r.svg+'</div>';
   if(invMode==='sup'){const on=()=>{supOpt.f=$('#so_f').value;const g=$('#so_g');supOpt.g=g?g.value:'*';supOpt.cl=$('#so_c').checked;refreshInvoice();};['so_f','so_g','so_c'].forEach(id=>{const e=$('#'+id);if(e)e.addEventListener('change',on);});}
@@ -1103,6 +1142,8 @@ const A={
   sharePng:async()=>{const o=order(invOpen);if(!o)return;try{const r=curInvoice(o);const blob=await svgToPngBlob(r.svg,r.w,r.h,2);await shareBlob(invFileName(o,'png'),blob);}catch(e){alert('Не удалось создать картинку: '+(e.message||e));}},
   sharePdf:async()=>{const o=order(invOpen);if(!o)return;toast('Готовлю PDF…');try{const r=curInvoice(o);if(invMode==='sup'&&!r.n){alert('Нет позиций по выбранному фильтру');return;}const blob=await svgToPdf(r);await shareBlob(invFileName(o,'pdf'),blob);}catch(e){alert('Не удалось создать PDF: '+(e.message||e));}},
   supInvoice:d=>showInvoice(d.id,'sup'),
+  editTheme:()=>pushSheet(themeForm()),
+  setTheme:d=>{try{localStorage.setItem('zakup_theme',d.v);}catch(e){}applyTheme();$$('#panel .thc').forEach(b=>b.classList.toggle('on',b.dataset.v===d.v));renderMain();},
   buyOrder:d=>{ui.buyOrder=d.v;renderMain();},
   buyToggle:()=>{ui.buyShowDone=!ui.buyShowDone;renderMain();},
   newClient:()=>pushSheet(clientForm(null)),
