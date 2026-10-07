@@ -133,6 +133,24 @@ input::-webkit-date-and-time-value{text-align:left}
 @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 .shake{animation:shake .25s 2}
 .big-amt{font-size:34px;font-weight:700;text-align:center;min-height:64px}
+.qrow{display:grid;grid-template-columns:1fr 62px 78px 50px;gap:6px;align-items:center}
+.qrow .field{padding:0 10px;min-height:50px}
+.addbtn{height:50px;border-radius:12px;background:var(--accent);color:#fff;font-size:26px;font-weight:700;text-align:center}
+.addbtn:active{opacity:.75}
+.qitem{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:15px}
+.qitem:last-child{border-bottom:none}
+.qitem .xb{width:34px;height:34px;border-radius:17px;background:var(--chip);color:var(--red);font-size:18px;flex:none;text-align:center}
+.prow{display:grid;grid-template-columns:1fr 96px 42px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.prow:last-child{border-bottom:none}
+.prow .field{min-height:44px;text-align:right;font-weight:600}
+.prow .ck{width:38px;height:38px}
+details.more{margin-top:14px;background:var(--card);border-radius:12px;padding:0 12px}
+details.more summary{padding:14px 2px;color:var(--accent);font-weight:600;font-size:15px;list-style:none;cursor:pointer}
+details.more summary::-webkit-details-marker{display:none}
+details.more[open]{padding-bottom:12px}
+.ptable{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+.ptable td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.ptable td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 /* login */
 .login{max-width:380px;margin:12vh auto 0;padding:0 20px;text-align:center}
 .login .logo{width:84px;height:84px;border-radius:22px;margin:0 auto 14px;display:block}
@@ -201,7 +219,7 @@ const plural=(n,a,b,c)=>{n=Math.abs(n)%100;const n1=n%10;if(n>10&&n<20)return c;
 const nf=new Intl.NumberFormat('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2});
 const r2=n=>Math.round(n*100)/100;
 const num=s=>{if(s==null)return null;s=String(s).replace(/[\s ]/g,'').replace(',','.');if(s==='')return null;const n=parseFloat(s);return isFinite(n)?n:null;};
-const CUR={RUB:{s:'₽',w:'руб'},KGS:{s:'сом',w:'сом'}};
+const CUR={RUB:{s:'₽',w:'руб'},KGS:{s:'сом',w:'сом'},USD:{s:'$',w:'$'}};
 const money=(n,c)=>nf.format(r2(n||0))+' '+(CUR[c]||CUR.RUB).w;
 const numS=v=>v==null||v===''?'':String(v).replace('.',',');
 
@@ -216,6 +234,7 @@ const UNITS=['м','шт','пач','рул','кг','уп'];
 const METHODS=['Золотая корона','Астрасенд','Карта','Наличные','Другое'];
 const MESSENGERS=['WhatsApp','Telegram','VK','Instagram'];
 const DEFAULT_SETTINGS={brand:'dordoi.confidence',instagram:'dordoi.confidence',phone:'996-220-276-236 Эржигит (Руководитель)',footer:'Заказ производится в инд. группах',commission:5,packing:300,owners:[],staff:{},rates:{RUB_KGS:1.1,KGS_RUB:0.9}};
+const UNIT_MAP=[[/^(шт|штук|штуки|штука|бут)/i,'шт'],[/^(уп|упак)/i,'уп'],[/^пач/i,'пач'],[/^(м|метр)/i,'м'],[/^рул/i,'рул'],[/^кг/i,'кг']];
 
 /* ============ data layer: Firebase or local demo ============ */
 const cache={orders:{},clients:{},meta:{}};
@@ -345,7 +364,7 @@ function itemRow(o,it,showClient){
   const cur=o.currency||'RUB',q=+it.qty||0,sum=q*(+it.price||0);
   const ckCls=it.status==='na'?'na':it.status==='checked'?'v2':isDone(it)?'on':'';
   const ckTxt=it.status==='na'?'✕':it.status==='checked'?'✓✓':'✓';
-  const sub=[showClient?ordTitle(o):'',it.req?'просили: '+it.req:'',it.status==='res'?'забронировано':'',it.status==='req'?'ждём метраж':'',it.note].filter(Boolean).join(' · ');
+  const sub=[showClient?ordTitle(o):'',it.req?'просили: '+it.req:'',it.status==='res'?'забронировано':'',it.status==='req'?(o.type==='cosm'?'заказано':'ждём метраж'):'',it.note].filter(Boolean).join(' · ');
   return '<div class="item'+(it.status==='na'?' na':'')+'"><button class="ck '+ckCls+'" data-act="tick" data-o="'+o.id+'" data-i="'+it.id+'" aria-label="Выкуплено">'+ckTxt+'</button><button class="body" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><div class="nm">'+esc(it.name||'Без названия')+'</div>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</button><button class="sum" data-act="editItem" data-o="'+o.id+'" data-i="'+it.id+'"><b>'+(q?nf.format(r2(sum)):'—')+'</b><span>'+(q?nf.format(q)+' '+esc(it.unit||'м'):'? '+esc(it.unit||'м'))+' × '+nf.format(+it.price||0)+'</span></button></div>';
 }
 function renderOrder(o){
@@ -361,7 +380,7 @@ function renderOrder(o){
   h+='<h2>Товар · '+c.n+' '+plural(c.n,'позиция','позиции','позиций')+'<span>выкуплено '+c.bought+' из '+c.n+'</span></h2>';
   if(c.items.length){h+='<div class="list">'+groupItems(c.items).map(g=>{const gs=g.items.filter(i=>i.status!=='na').reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);return (g.g||groupItems(c.items).length>1?'<div class="grp">'+esc(g.g||'Без группы')+'<span>'+nf.format(r2(gs))+'</span></div>':'')+g.items.map(it=>itemRow(o,it,false)).join('');}).join('')+'</div>';}
   else h+='<div class="card empty">Позиций пока нет. Добавьте товар, который выбрал клиент.</div>';
-  h+='<div class="btns"><button class="btn" data-act="addItem" data-id="'+o.id+'">+ Позиция</button></div>';
+  h+='<div class="btns two"><button class="btn primary" data-act="quickAdd" data-id="'+o.id+'">⚡ Быстрый ввод</button><button class="btn" data-act="pasteList" data-id="'+o.id+'">📋 Вставить список</button></div><div class="btns two"><button class="btn" data-act="addItem" data-id="'+o.id+'">+ Одна позиция</button>'+(c.items.length?'<button class="btn" data-act="pricesMode" data-id="'+o.id+'">'+CUR[cur].s+' Цены по накладной</button>':'<span></span>')+'</div>';
   // totals
   h+='<h2>Итог счёта</h2><button class="card tot" style="display:block;width:100%;text-align:left" data-act="editServices" data-id="'+o.id+'">'+
     '<div class="kv"><span>Сумма товара</span><b>'+money(c.goods,cur)+'</b></div><div class="kv"><span>Упаковка / тачка / отправка</span><b>'+money(c.packing,cur)+'</b></div><div class="kv"><span>Комиссия '+nf.format(+o.commission||0)+'%</span><b>'+money(c.commission,cur)+'</b></div>'+
@@ -488,16 +507,18 @@ function itemForm(oid,iid,preset){return ()=>{
   const o=order(oid);if(!o)return null;const it=iid?(o.items||{})[iid]:null;if(iid&&!it)return null;const cur=o.currency||'RUB';
   const d=it?Object.assign({},it):Object.assign({name:'',group:'',req:'',qty:null,unit:o.type==='cosm'?'шт':'м',price:null,priceSup:null,status:o.type==='cosm'&&['buying','check'].includes(o.status)?'bought':'req',note:''},preset||{});
   const supSame=d.priceSup==null||d.priceSup===''||+d.priceSup===+d.price;
+  const cosm=o.type==='cosm';const moreOpen=!!it&&(!supSame||!!d.note||d.status==='na'||(cosm&&!!d.group));
   return {title:it?'Позиция':'Новая позиция',saveLabel:'Готово',body:
-    F.text('f_nm','Наименование',d.name,'Например: Муслин вишня','list="dlNames" autocapitalize="sentences" autocomplete="off"')+F.dl('dlNames',allNames())+
-    F.text('f_grp','Группа / ряд / поставщик',d.group,'Например: Муслин, ряд 12','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.dl('dlGroups',allGroups())+
-    F.text('f_req','Что просил клиент',d.req,'Например: 1 рулон')+
-    '<div class="three-col"><div>'+F.numf('f_qty','Кол-во',d.qty,'51')+'</div><div><label class="fl" for="f_unit">Ед.</label><select class="field" id="f_unit">'+UNITS.map(u=>'<option'+(u===d.unit?' selected':'')+'>'+u+'</option>').join('')+'</select></div><div>'+F.numf('f_pr','Цена, '+CUR[cur].s,d.price,'160')+'</div></div>'+
+    F.text('f_nm','Наименование',d.name,cosm?'Например: Дезодорант':'Например: Муслин вишня','list="dlNames" autocapitalize="sentences" autocomplete="off"')+F.dl('dlNames',allNames())+
+    (cosm?'':F.text('f_grp','Группа / ряд / поставщик',d.group,'Например: Муслин, ряд 12','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.text('f_req','Что просил клиент',d.req,'Например: 1 рулон'))+F.dl('dlGroups',allGroups())+
+    '<div class="three-col"><div>'+F.numf('f_qty','Кол-во',d.qty,cosm?'4':'51')+'</div><div><label class="fl" for="f_unit">Ед.</label><select class="field" id="f_unit">'+UNITS.map(u=>'<option'+(u===d.unit?' selected':'')+'>'+u+'</option>').join('')+'</select></div><div>'+F.numf('f_pr','Цена, '+CUR[cur].s,d.price,cosm?'190':'160')+'</div></div>'+
     '<div class="box" id="sumBox"></div>'+
+    '<details class="more"'+(moreOpen?' open':'')+'><summary>Ещё: '+(cosm?'контейнер, ':'')+'цена поставщика, статус, заметка</summary>'+
+    (cosm?F.text('f_grp','Контейнер / ряд / поставщик',d.group,'Например: ряд 5','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.text('f_req','Что просил клиент',d.req,'Например: 2 шт по 25'):'')+
     '<label class="fl" style="display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text);font-weight:500"><input type="checkbox" id="f_supsame" '+(supSame?'checked':'')+' style="width:22px;height:22px;accent-color:var(--accent)"> Цена поставщика такая же</label>'+
     '<div id="supBox" style="'+(supSame?'display:none':'')+'">'+F.numf('f_sup','Цена поставщика, '+CUR[cur].s,d.priceSup,'Например: 150')+'</div>'+
     F.chips('st','Статус',Object.keys(IST).map(k=>[k,IST[k]]),d.status)+
-    F.text('f_note','Заметка',d.note,'Необязательно')+
+    F.text('f_note','Заметка',d.note,'Необязательно')+'</details>'+
     '<button class="save" data-act="sheetSave">Сохранить</button>'+
     (it?'':'<div class="btns"><button class="btn" data-act="sheetSaveMore">Сохранить и добавить ещё</button></div>')+
     (it?'<div class="btns"><button class="btn danger" data-act="delItem" data-o="'+oid+'" data-i="'+iid+'">Удалить позицию</button></div>':''),
@@ -518,6 +539,101 @@ function itemForm(oid,iid,preset){return ()=>{
         if(more==='more'){toast('Добавлено: '+name);popSheet();pushSheet(itemForm(oid,null,{group:rec.group,unit:rec.unit,status:rec.status}));return 'stay';}toast('Позиция добавлена');}
     }};
 };}
+/* ---- quick add (batch) ---- */
+let qctx=null;
+function quickAddForm(oid){return ()=>{
+  const o=order(oid);if(!o)return null;const cur=o.currency||'RUB',cosm=o.type==='cosm';
+  if(!ui.batch||ui.batch.oid!==oid)ui.batch={oid,group:'',status:cosm?'bought':'req',unit:cosm?'шт':'м',added:[]};
+  const b=ui.batch;qctx={oid,cur};
+  return {title:'Быстрый ввод',body:
+    '<div class="card" style="padding:12px 14px"><div class="s" style="margin:0 0 8px">Общее для всех следующих позиций</div>'+
+    F.text('q_grp','',b.group,cosm?'Контейнер / ряд (необязательно)':'Группа / поставщик (необязательно)','list="dlGroups" autocomplete="off" autocapitalize="sentences"')+F.dl('dlGroups',allGroups())+
+    '<div style="display:flex;gap:8px;margin-top:8px;align-items:center"><select class="field" id="q_unit" style="width:90px;flex:none">'+UNITS.map(u=>'<option'+(u===b.unit?' selected':'')+'>'+u+'</option>').join('')+'</select>'+
+    '<div class="chips" data-name="qst" style="flex-wrap:nowrap;flex:1;gap:6px">'+[['bought','✓ Выкуплено'],['req',cosm?'Заказано':'Без метража']].map(o=>'<button type="button" class="chip'+(b.status===o[0]?' on':'')+'" data-v="'+o[0]+'" style="flex:1;padding:0 8px;font-size:15px;white-space:nowrap">'+o[1]+'</button>').join('')+'</div></div></div>'+
+    '<div class="qrow" style="margin-top:14px"><input class="field" id="q_nm" placeholder="Название" list="dlNames" autocomplete="off" autocapitalize="sentences" enterkeyhint="next"><input class="field" id="q_qty" placeholder="Кол." inputmode="decimal" autocomplete="off" enterkeyhint="next"><input class="field" id="q_pr" placeholder="Цена" inputmode="decimal" autocomplete="off" enterkeyhint="done"><button class="addbtn" data-act="qAdd" aria-label="Добавить">+</button></div>'+F.dl('dlNames',allNames())+
+    '<div class="hint">Название → Кол-во → Цена → Enter. Цену можно не писать — внесёте потом в «Цены по накладной».</div>'+
+    '<h2 id="q_info" style="margin-top:16px"></h2><div class="list" id="q_list"></div>'+
+    '<button class="save" data-act="closeSheet">Готово</button>',
+    onOpen:()=>{
+      const nm=$('#q_nm'),qt=$('#q_qty'),pr=$('#q_pr');
+      nm.addEventListener('change',()=>{const lp=lastPriceFor(nm.value.trim());if(lp&&!pr.value&&lp.price)pr.value=numS(lp.price);});
+      nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(nm.value.trim())qt.focus();}});
+      qt.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();pr.focus();}});
+      pr.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();qAdd();}});
+      qt.addEventListener('input',()=>{qt.value=qt.value.replace(/[^\d.,]/g,'');});pr.addEventListener('input',()=>{pr.value=pr.value.replace(/[^\d.,]/g,'');});
+      drawQList();setTimeout(()=>nm.focus(),250);
+    }};
+};}
+function drawQList(){
+  const b=ui.batch;if(!b||!$('#q_list'))return;const cur=qctx.cur;
+  const sum=b.added.reduce((s,a)=>s+(a.qty||0)*(a.price||0),0);
+  $('#q_info').innerHTML=b.added.length?'Добавлено '+b.added.length+'<span>'+money(sum,cur)+'</span>':'';
+  $('#q_list').style.display=b.added.length?'':'none';
+  $('#q_list').innerHTML=b.added.map(a=>'<div class="qitem"><div class="grow"><div class="t" style="font-weight:600">'+esc(a.name)+'</div><div class="s" style="margin:0">'+(a.qty?nf.format(a.qty)+' '+esc(a.unit):'? '+esc(a.unit))+' × '+(a.price?nf.format(a.price):'цена потом')+(a.group?' · '+esc(a.group):'')+'</div></div><div class="amt">'+(a.qty&&a.price?nf.format(r2(a.qty*a.price)):'')+'</div><button class="xb" data-act="qDel" data-i="'+a.id+'" aria-label="Убрать">×</button></div>').join('');
+}
+function qAdd(){
+  const b=ui.batch,o=order(qctx.oid);if(!b||!o)return;
+  const nm=$('#q_nm'),name=nm.value.trim();if(!name){shakeEl('q_nm');return;}
+  const qty=num(val('q_qty')),price=num(val('q_pr'));
+  b.group=val('q_grp');b.unit=$('#q_unit').value;b.status=chipVal('qst')||'req';
+  let status=b.status;if(status==='bought'&&!qty)status='req';if(status==='req'&&qty&&o.type!=='cosm')status='res';
+  const nid=uid(),ord=itemsOf(o).reduce((m,i)=>Math.max(m,i.ord||0),0)+1;
+  DB.update('orders',o.id,{['items.'+nid]:{name,group:b.group,req:'',qty,unit:b.unit,price:price==null?0:price,priceSup:price==null?null:price,status,note:'',ord,created:Date.now()}});
+  b.added.unshift({id:nid,name,qty,price,unit:b.unit,group:b.group});
+  nm.value='';$('#q_qty').value='';$('#q_pr').value='';nm.focus();
+  if(navigator.vibrate)navigator.vibrate(10);drawQList();
+}
+/* ---- prices by invoice ---- */
+function pricesForm(oid){return ()=>{
+  const o=order(oid);if(!o)return null;const cur=o.currency||'RUB';const items=itemsOf(o).filter(i=>i.status!=='na');qctx={oid,cur};
+  const cosm=o.type==='cosm';
+  return {title:'Цены по накладной',body:
+    '<div class="box" id="pp_tot"></div><div class="hint">Впишите цену за единицу и нажмите Enter — курсор перейдёт к следующей позиции. '+(cosm?'Галочка справа — «сверено с накладной».':'')+'</div>'+
+    '<div class="list" style="margin-top:10px">'+items.map((it,k)=>'<div class="prow"><div style="min-width:0"><div class="t ell">'+esc(it.name)+'</div><div class="s" style="margin:0">'+(it.qty?nf.format(+it.qty)+' '+esc(it.unit||''):'кол-во?')+(it.group?' · '+esc(it.group):'')+' <span id="pps_'+it.id+'"></span></div></div><input class="field pp" id="pp_'+it.id+'" data-i="'+it.id+'" data-k="'+k+'" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="цена" value="'+(+it.price?numS(it.price):'')+'">'+
+      (cosm?'<button class="ck '+(it.status==='checked'?'v2':'')+'" data-act="ppCheck" data-i="'+it.id+'">'+(it.status==='checked'?'✓✓':'✓')+'</button>':'<span></span>')+'</div>').join('')+'</div>'+
+    '<button class="save" data-act="closeSheet">Готово</button>',
+    onOpen:()=>{
+      const ins=$$('#panel input.pp');
+      const upd=()=>{const oo=order(oid);if(!oo)return;let g=0,miss=0;itemsOf(oo).forEach(it=>{if(it.status==='na')return;const inp=$('#pp_'+it.id);const p=inp?num(inp.value):+it.price;const q=+it.qty||0;if(!p)miss++;g+=q*(p||0);const sp=$('#pps_'+it.id);if(sp)sp.textContent=p&&q?'= '+nf.format(r2(p*q)):'';});
+        $('#pp_tot').innerHTML='Сумма товара: <b>'+money(g,cur)+'</b>'+(miss?' · без цены: '+miss:' · все цены внесены ✓');};
+      const commit=inp=>{const it=(order(oid).items||{})[inp.dataset.i];if(!it)return;const p=num(inp.value);const np=p==null?0:p;if(np===(+it.price||0))return;
+        const patch={['items.'+inp.dataset.i+'.price']:np};if(it.priceSup==null||it.priceSup===''||+it.priceSup===+it.price)patch['items.'+inp.dataset.i+'.priceSup']=p;DB.update('orders',oid,patch);};
+      ins.forEach((inp,k)=>{inp.addEventListener('input',()=>{inp.value=inp.value.replace(/[^\d.,]/g,'');upd();});inp.addEventListener('change',()=>commit(inp));inp.addEventListener('blur',()=>commit(inp));
+        inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commit(inp);const nx=ins[k+1];if(nx){nx.focus();nx.select&&nx.select();}else inp.blur();}});});
+      upd();const first=ins.find(i=>!i.value);if(first)setTimeout(()=>first.focus(),250);
+    }};
+};}
+/* ---- paste list ---- */
+function normUnit(u){for(const [re,v] of UNIT_MAP)if(re.test(u))return v;return null;}
+function parseList(text){
+  const units='штуки|штука|штук|шт|упаковки|упак|уп|пачки|пачек|пач|метров|метра|метр|м|рулона|рулон|рул|кг|бут';
+  return text.split(/\n|;/).map(s=>s.trim()).filter(Boolean).map(l0=>{
+    let l=' '+l0.replace(/^\s*(?:[-–—*•]+|\d{1,3}[.)])\s+/,'')+' ';let qty=null,price=null,unit=null,m;
+    if((m=l.match(/\s(?:по|x|х|×|\*)\s*(\d+(?:[.,]\d+)?)(?=\D|$)/i))){price=num(m[1]);l=l.replace(m[0],' ');}
+    if((m=l.match(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*('+units+')\\.?(?=[\\s,;:)]|$)','i')))){qty=num(m[1]);unit=normUnit(m[2]);l=l.replace(m[0],' ');}
+    if((m=l.match(/(?:\s(\d+(?:[.,]\d+)?)){1,2}\s*[,.;:]?\s*$/))){const ns=m[0].trim().replace(/[,.;:]$/,'').split(/\s+/).map(num);
+      if(qty==null){qty=ns[0];if(ns.length>1&&price==null)price=ns[1];}else if(price==null)price=ns[ns.length-1];l=l.slice(0,l.length-m[0].length);}
+    const name=l.replace(/[\s\-–—:,=]+$/,'').replace(/^[\s\-–—:,]+/,'').replace(/\s{2,}/g,' ').trim();
+    return {name:name||l0,qty,price,unit};
+  }).filter(r=>r.name);
+}
+function pasteForm(oid){return ()=>{
+  const o=order(oid);if(!o)return null;const cur=o.currency||'RUB',cosm=o.type==='cosm';
+  return {title:'Вставить список',saveLabel:'Добавить',body:
+    '<div class="hint" style="margin-top:0">Скопируйте сообщение клиента или свой список и вставьте сюда. Каждая позиция — с новой строки. Понимает «Дезодорант 24 350», «Маска 4шт», «Крем 2шт по 250», «Муслин вишня 1 рулон».</div>'+
+    '<textarea class="field" id="pl_t" style="min-height:160px;margin-top:10px" placeholder="Дезодорант 24 350&#10;Маска 4 190&#10;Пилинг гель 4шт"></textarea>'+
+    F.chips('plst','Статус',[['req',cosm?'Заказано':'Запрошено (без метража)'],['bought','✓ Уже выкуплено']],'req')+
+    F.text('pl_grp','Контейнер / группа для всех (необязательно)','','','list="dlGroups" autocomplete="off"')+F.dl('dlGroups',allGroups())+
+    '<div id="pl_prev"></div><button class="save" data-act="sheetSave">Добавить позиции</button>',
+    onOpen:()=>{const t=$('#pl_t');const upd=()=>{const rows=parseList(t.value);const pv=$('#pl_prev');if(!rows.length){pv.innerHTML='';return;}
+      pv.innerHTML='<h2>Будет добавлено: '+rows.length+'</h2><div class="card" style="padding:6px 12px"><table class="ptable">'+rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td class="r">'+(r.qty!=null?nf.format(r.qty)+' '+(r.unit||(cosm?'шт':'м')):'<span class="muted">кол-во?</span>')+'</td><td class="r">'+(r.price!=null?nf.format(r.price):'<span class="muted">цена?</span>')+'</td></tr>').join('')+'</table></div>';};
+      t.addEventListener('input',upd);setTimeout(()=>t.focus(),250);},
+    onSave:()=>{const rows=parseList(val('pl_t'));if(!rows.length){shakeEl('pl_t');return false;}const st=chipVal('plst');const grp=val('pl_grp');
+      let ord=itemsOf(o).reduce((m,i)=>Math.max(m,i.ord||0),0);const patch={};
+      rows.forEach(r=>{ord++;let s=st;if(s==='bought'&&!r.qty)s='req';const unit=r.unit||(cosm?'шт':'м');
+        patch['items.'+uid()]={name:r.name,group:grp,req:cosm?'':(r.qty!=null?nf.format(r.qty)+' '+unit:''),qty:cosm?r.qty:(st==='bought'?r.qty:null),unit,price:r.price==null?0:r.price,priceSup:r.price,status:s,note:'',ord,created:Date.now()};});
+      DB.update('orders',oid,patch);toast('Добавлено позиций: '+rows.length);}};
+};}
 /* ---- services ---- */
 function servicesForm(oid){return ()=>{const o=order(oid);if(!o)return null;const cur=o.currency||'RUB',c=calc(o);
   return {title:'Итог счёта',body:'<div class="box">Сумма товара: <b>'+money(c.goods,cur)+'</b></div>'+F.numf('f_pack','Упаковка / тачка / отправка, '+CUR[cur].s,o.packing,'300')+F.numf('f_com','Комиссия, %',o.commission,'5')+F.numf('f_del','Доставка / погрузка / пресс, '+CUR[cur].s,o.delivery||'','Из накладной карго')+'<div class="hint">Доставку вносите после отправки — сумму из накладной Альфа карго или ДПД. Клиенту уйдёт новый счёт с остатком к оплате.</div><button class="save" data-act="sheetSave">Сохранить</button>',
@@ -525,16 +641,16 @@ function servicesForm(oid){return ()=>{const o=order(oid);if(!o)return null;cons
 /* ---- payment ---- */
 function payForm(oid,pid){return ()=>{const o=order(oid);if(!o)return null;const ocur=o.currency||'RUB';const p=pid?(o.payments||{})[pid]:null;if(pid&&!p)return null;const st=S(),c=calc(o);
   const d=p||{amount:c.balance<0?-c.balance:null,cur:ocur,rate:1,method:'Золотая корона',date:today(),kind:o.status==='shipped'?'delivery':'goods',note:''};
-  const defRate=cu=>cu===ocur?1:(st.rates||{})[cu+'_'+ocur]||1;
+  const defRate=cu=>cu===ocur?1:(st.rates||{})[cu+'_'+ocur]||'';
   return {title:p?'Платёж':'Платёж клиента',saveLabel:'Готово',body:
     '<input class="field big-amt" id="f_amt" type="text" inputmode="decimal" placeholder="0" autocomplete="off" value="'+numS(d.amount)+'">'+
-    F.chips('pcur','Валюта перевода',[['RUB','Рубли'],['KGS','Сомы']],d.cur||ocur)+
-    '<div id="rateBox"><label class="fl" for="f_rate" id="rateLbl">Курс</label>'+F.numf('f_rate','',d.cur&&d.cur!==ocur?d.rate:defRate(ocur==='RUB'?'KGS':'RUB'),'')+'</div><div class="box" id="convBox" style="display:none"></div>'+
+    F.chips('pcur','Валюта перевода',[['RUB','Рубли'],['KGS','Сомы'],['USD','Доллары']],d.cur||ocur)+
+    '<div id="rateBox"><label class="fl" for="f_rate" id="rateLbl">Курс</label>'+F.numf('f_rate','',d.cur&&d.cur!==ocur?d.rate:'','')+'</div><div class="box" id="convBox" style="display:none"></div>'+
     F.chips('meth','Как получили',METHODS,d.method)+
     F.chips('kind','За что',[['goods','За товар'],['delivery','За доставку']],d.kind)+
     F.date('f_pd','Дата',d.date)+F.text('f_pn','Комментарий',d.note,'Например: перевод на Эржигита')+
     '<button class="save" data-act="sheetSave">Сохранить</button>'+(p?'<div class="btns"><button class="btn danger" data-act="delPay" data-o="'+oid+'" data-p="'+pid+'">Удалить платёж</button></div>':''),
-    hooks:{pcur:x=>{if(x!==ocur&&!(num(val('f_rate'))>0))$('#f_rate').value=numS(defRate(x));updRate();}},
+    hooks:{pcur:x=>{if(x!==ocur)$('#f_rate').value=numS(defRate(x));updRate();}},
     onOpen:()=>{$('#f_amt').addEventListener('input',updRate);$('#f_rate').addEventListener('input',updRate);updRate();if(!p)setTimeout(()=>$('#f_amt')&&$('#f_amt').focus(),250);},
     onSave:()=>{const a=num(val('f_amt'));if(!(a>0)){shakeEl('f_amt');return false;}const pc=chipVal('pcur');let rate=1;if(pc!==ocur){rate=num(val('f_rate'));if(!(rate>0)){shakeEl('f_rate');return false;}const rs=Object.assign({},st.rates||{});rs[pc+'_'+ocur]=rate;DB.update('meta','settings',{rates:rs});}
       const rec={amount:r2(a),cur:pc,rate,method:chipVal('meth'),kind:chipVal('kind'),date:val('f_pd')||today(),note:val('f_pn')};
@@ -564,8 +680,8 @@ function clientDetail(id){return detail(()=>{const c=client(id);if(!c)return nul
 /* ---- settings ---- */
 function invoiceSettingsForm(){return ()=>{const st=S();return {title:'Счёт-фактура',saveLabel:'Готово',body:F.text('f_br','Название в шапке',st.brand,'dordoi.confidence')+F.text('f_ig','Instagram',st.instagram,'dordoi.confidence')+F.text('f_ph','Телефон для жалоб и вопросов',st.phone,'996-…')+F.text('f_ft','Строка в подвале',st.footer,'Заказ производится в инд. группах')+'<button class="save" data-act="sheetSave">Сохранить</button>',
   onSave:()=>{DB.update('meta','settings',{brand:val('f_br'),instagram:val('f_ig'),phone:val('f_ph'),footer:val('f_ft')});toast('Сохранено');}};};}
-function defaultsForm(){return ()=>{const st=S(),r=st.rates||{};return {title:'По умолчанию',saveLabel:'Готово',body:F.numf('f_com','Комиссия для новых заказов, %',st.commission,'5')+F.numf('f_pack','Упаковка для новых заказов',st.packing,'300')+F.numf('f_r1','Курс: 1 сом = ? руб',r.KGS_RUB,'0,9')+F.numf('f_r2','Курс: 1 руб = ? сом',r.RUB_KGS,'1,1')+'<div class="hint">Курсы подставляются в платёж, когда клиент переводит в другой валюте. Последний введённый курс запоминается сам.</div><button class="save" data-act="sheetSave">Сохранить</button>',
-  onSave:()=>{DB.update('meta','settings',{commission:num(val('f_com'))||0,packing:num(val('f_pack'))||0,rates:{KGS_RUB:num(val('f_r1'))||0.9,RUB_KGS:num(val('f_r2'))||1.1}});toast('Сохранено');}};};}
+function defaultsForm(){return ()=>{const st=S(),r=st.rates||{};return {title:'По умолчанию',saveLabel:'Готово',body:F.numf('f_com','Комиссия для новых заказов, %',st.commission,'5')+F.numf('f_pack','Упаковка для новых заказов',st.packing,'300')+F.numf('f_r1','Курс: 1 сом = ? руб',r.KGS_RUB,'0,9')+F.numf('f_r2','Курс: 1 руб = ? сом',r.RUB_KGS,'1,1')+'<div class="two-col"><div>'+F.numf('f_r3','1 $ = ? руб',r.USD_RUB,'')+'</div><div>'+F.numf('f_r4','1 $ = ? сом',r.USD_KGS,'')+'</div></div>'+'<div class="hint">Курсы подставляются в платёж, когда клиент переводит в другой валюте. Последний введённый курс запоминается сам.</div><button class="save" data-act="sheetSave">Сохранить</button>',
+  onSave:()=>{DB.update('meta','settings',{commission:num(val('f_com'))||0,packing:num(val('f_pack'))||0,rates:Object.assign({},r,{KGS_RUB:num(val('f_r1'))||0.9,RUB_KGS:num(val('f_r2'))||1.1,USD_RUB:num(val('f_r3'))||undefined,USD_KGS:num(val('f_r4'))||undefined})});toast('Сохранено');}};};}
 function staffForm(){return ()=>{const st=S();const staff=Object.assign({},st.staff||{});if(me&&!staff[me.email])staff[me.email]=myName();const emails=Object.keys(staff);
   return {title:'Сотрудники',saveLabel:'Готово',body:'<div class="hint" style="margin-top:0">Имя подставляется в счёт как «Менеджер» или «Админ». Владелец видит доход по заказам. Новый сотрудник появится здесь после первого входа, а войти он сможет, когда его почта добавлена в Firebase и в правила доступа.</div>'+
     '<div class="list" style="margin-top:10px">'+emails.map((e,i)=>'<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="s" style="margin:0 0 6px">'+esc(e)+'</div><input class="field" id="sn'+i+'" value="'+esc(staff[e])+'" placeholder="Имя"></div><label style="display:flex;align-items:center;gap:6px;font-size:14px"><input type="checkbox" id="so'+i+'" '+(st.owners.includes(e)?'checked':'')+' style="width:22px;height:22px;accent-color:var(--accent)">владелец</label></div>').join('')+'</div>'+
@@ -668,6 +784,12 @@ const A={
     if(nx==='closed'&&c.balance<-0.009&&!confirm('Клиент ещё должен '+nf.format(-c.balance)+'. Закрыть заказ всё равно?'))return;
     setStatus(o,nx);},
   addItem:d=>pushSheet(itemForm(d.id,null)),
+  quickAdd:d=>pushSheet(quickAddForm(d.id)),
+  qAdd:()=>qAdd(),
+  qDel:d=>{const b=ui.batch;if(!b)return;DB.update('orders',b.oid,{['items.'+d.i]:DEL});b.added=b.added.filter(a=>a.id!==d.i);drawQList();toast('Убрано');},
+  pasteList:d=>pushSheet(pasteForm(d.id)),
+  pricesMode:d=>pushSheet(pricesForm(d.id)),
+  ppCheck:(d,el)=>{const it=(order(qctx.oid).items||{})[d.i];if(!it)return;const ns=it.status==='checked'?'bought':'checked';DB.update('orders',qctx.oid,{['items.'+d.i+'.status']:ns});el.classList.toggle('v2',ns==='checked');el.textContent=ns==='checked'?'✓✓':'✓';},
   editItem:d=>pushSheet(itemForm(d.o,d.i)),
   delItem:d=>{if(!confirm('Удалить позицию?'))return;DB.update('orders',d.o,{['items.'+d.i]:DEL});popSheet();toast('Удалено');},
   tick:d=>{const o=order(d.o);const it=(o.items||{})[d.i];if(!it)return;let ns;
