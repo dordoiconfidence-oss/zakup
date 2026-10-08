@@ -390,7 +390,7 @@ function calc(o){
 }
 const ordTitle=o=>'№'+(o.num||'—')+' · '+(o.clientName||'Без клиента');
 const supOf=it=>it.priceSup!=null&&it.priceSup!==''?+it.priceSup:(+it.price||0);
-const mkPct=()=>+S().markup||0;
+const mkPct=()=>0; // наценку вписываем вручную, без процентов
 const withMk=(sup,pct)=>sup==null?null:(pct?Math.round(sup*(1+pct/100)):sup);
 // цена клиенту пустая → по наценке (или как у поставщика); нет цены поставщика → наценки нет
 function priceRec(sup,cli){if(sup==null&&cli==null)return {price:0,priceSup:null};if(sup==null)return {price:cli,priceSup:cli};return {price:cli==null?withMk(sup,mkPct()):cli,priceSup:sup};}
@@ -402,12 +402,12 @@ function setMarkup(v){let p;if(v==='c'){const r=prompt('Наценка, % (на�
 function redrawMk(){const r=$('#panel .mkrow');if(r)r.outerHTML=mkChips();}
 // связка «цена поставщика → цена клиенту»: пока клиентскую не трогали, она считается сама
 function bindAuto(supEl,cliEl,onChange){
-  if(cliEl.dataset.auto==null)cliEl.dataset.auto=cliEl.value?'0':'1';
-  const fill=()=>{if(cliEl.dataset.auto!=='1')return;const sp=num(supEl.value);cliEl.value=sp==null?'':numS(withMk(sp,mkPct()));};
+  // цена клиенту пустая = как у поставщика (подсказка серым); вписали своё — это и есть наценка
+  const ph0=cliEl.getAttribute('placeholder')||'Клиенту';
+  const fill=()=>{const sp=num(supEl.value);cliEl.placeholder=sp==null?ph0:'= '+numS(sp);};
   supEl.addEventListener('input',()=>{supEl.value=supEl.value.replace(/[^\d.,]/g,'');fill();onChange&&onChange();});
-  cliEl.addEventListener('input',()=>{cliEl.value=cliEl.value.replace(/[^\d.,]/g,'');cliEl.dataset.auto=cliEl.value?'0':'1';onChange&&onChange();});
-  cliEl.addEventListener('focus',()=>{if(cliEl.value)setTimeout(()=>{try{cliEl.select();}catch(e){}},0);});
-  return fill;
+  cliEl.addEventListener('input',()=>{cliEl.value=cliEl.value.replace(/[^\d.,]/g,'');onChange&&onChange();});
+  fill();return fill;
 }
 function groupItems(items){const gs=[],map={};items.forEach(it=>{const g=(it.group||'').trim();if(!(g in map)){map[g]={g,items:[]};gs.push(map[g]);}map[g].items.push(it);});return gs;}
 function nextNum(){return orders().reduce((m,o)=>Math.max(m,+o.num||0),0)+1;}
@@ -562,8 +562,10 @@ function themeForm(){return ()=>{const g=themeGet();
   const card=k=>{const th=THEMES[k];return '<button class="thc'+(g.t===k?' on':'')+'" data-act="setTheme" data-v="'+k+'" style="background:'+th.L.bg+'"><div class="sw"><span class="dot" style="background:'+th.L.accent+'"></span><span class="dot" style="background:'+th.D.accent+';width:18px;height:18px"></span></div><div class="mb" style="background:'+th.L.accent+'">Счёт-фактура</div><div class="mc" style="background:'+th.L.accentbg+'"></div><div class="nm" style="color:#1b2124">'+th.n+'</div></button>';};
   return {title:'Оформление',body:'<label class="fl">Цвет</label><div class="thgrid">'+Object.keys(THEMES).map(card).join('')+'</div>'+
     F.chips('thm','Светлая или тёмная',[['auto','Авто'],['light','☀️ Светлая'],['dark','🌙 Тёмная']],g.m)+
-    '<div class="hint">«Авто» — как в настройках iPhone. Меняется сразу. Настройка своя на каждом телефоне — жена может выбрать другой цвет. Счёт-фактура для клиентов остаётся в фирменных цветах.</div><button class="save" data-act="closeSheet">Готово</button>',
-    hooks:{thm:v=>{try{localStorage.setItem('zakup_mode',v);}catch(e){}applyTheme();renderMain();}}};};}
+    '<label class="fl">Цвет счёт-фактуры</label><div class="chips" data-name="invc">'+Object.keys(INV_COLORS).map(k=>'<button type="button" class="chip'+((S().invColor||'teal')===k?' on':'')+'" data-v="'+k+'" style="display:flex;align-items:center;gap:8px;padding:0 12px"><span style="width:18px;height:18px;border-radius:50%;background:'+INV_COLORS[k].T+'"></span>'+THEMES[k].n+'</button>').join('')+'</div>'+
+    '<div class="btns" style="margin-top:10px"><button class="btn" data-act="invPreview">📄 Посмотреть счёт</button></div>'+
+    '<div class="hint">Цвет приложения и тема — свои на каждом телефоне. Цвет счёт-фактуры общий: клиенты и поставщики получат счёт одного цвета с любого телефона.</div><button class="save" data-act="closeSheet">Готово</button>',
+    hooks:{invc:v=>{if(!cache.meta.settings)cache.meta.settings={};cache.meta.settings.invColor=v;DB.update('meta','settings',{invColor:v});toast('Счёт-фактура: '+THEMES[v].n);},thm:v=>{try{localStorage.setItem('zakup_mode',v);}catch(e){}applyTheme();renderMain();}}};};}
 /* ============ sheets ============ */
 const stack=[];let hooks={},curSave=null;
 function pushSheet(fn){stack.push(fn);drawSheet(true);}
@@ -640,7 +642,7 @@ function itemForm(oid,iid,preset){return ()=>{
     F.text('f_nm','Наименование',d.name,cosm?'Например: Дезодорант':'Например: Муслин вишня','list="dlNames" autocapitalize="sentences" autocomplete="off"')+F.dl('dlNames',allNames())+
     (cosm?'':F.text('f_grp','Группа / ряд / поставщик',d.group,'Например: Муслин, ряд 12','list="dlGroups" autocapitalize="sentences" autocomplete="off"')+F.text('f_req','Что просил клиент',d.req,'Например: 1 рулон'))+F.dl('dlGroups',allGroups())+
     '<div class="two-col"><div>'+F.numf('f_qty','Кол-во',d.qty,cosm?'4':'51')+'</div><div><label class="fl" for="f_unit">Ед.</label><select class="field" id="f_unit">'+UNITS.map(u=>'<option'+(u===d.unit?' selected':'')+'>'+u+'</option>').join('')+'</select></div></div>'+
-    '<div class="two-col"><div>'+F.numf('f_sup','Цена поставщика',supV,cosm?'350':'160')+'</div><div>'+F.numf('f_pr','Цена клиенту',+d.price?d.price:null,'= поставщика','data-auto="'+(cliAuto?'1':'0')+'"')+'</div></div>'+mkChips()+
+    '<div class="two-col"><div>'+F.numf('f_sup','Цена поставщика',supV,cosm?'350':'160')+'</div><div>'+F.numf('f_pr','Цена клиенту',cliAuto?null:d.price,'= поставщика')+'</div></div>'+
     '<div class="box" id="sumBox"></div>'+
     '<div class="phbox"><button class="big" data-act="itemPhotoPick" id="f_phbig">'+(d.photo?'<img data-ph="'+d.photo+'" alt="">':'📷')+'</button><div class="grow"><button class="btn small" data-act="itemPhotoPick">'+(d.photo?'Заменить фото':'Добавить фото')+'</button>'+(d.photo?' <button class="btn small danger" data-act="itemPhotoDel" style="margin-top:6px">Убрать</button>':'')+'<div class="hint" style="margin:6px 2px 0">Снимок товара с ценником — видно при сверке</div></div></div>'+
     '<details class="more"'+(moreOpen?' open':'')+'><summary>Ещё: '+(cosm?'контейнер, ':'')+'статус, заметка</summary>'+
@@ -679,10 +681,10 @@ function quickAddForm(oid){return ()=>{
     '<div class="card" style="padding:12px 14px"><div class="s" style="margin:0 0 8px">Общее для всех следующих позиций</div>'+
     F.text('q_grp','',b.group,cosm?'Контейнер / ряд (необязательно)':'Группа / поставщик (необязательно)','list="dlGroups" autocomplete="off" autocapitalize="sentences"')+F.dl('dlGroups',allGroups())+
     '<div style="display:flex;gap:8px;margin-top:8px;align-items:center"><select class="field" id="q_unit" style="width:90px;flex:none">'+UNITS.map(u=>'<option'+(u===b.unit?' selected':'')+'>'+u+'</option>').join('')+'</select>'+
-    '<div class="chips" data-name="qst" style="flex-wrap:nowrap;flex:1;gap:6px">'+[['bought','✓ Выкуплено'],['req',cosm?'Заказано':'Без метража']].map(o=>'<button type="button" class="chip'+(b.status===o[0]?' on':'')+'" data-v="'+o[0]+'" style="flex:1;padding:0 8px;font-size:15px;white-space:nowrap">'+o[1]+'</button>').join('')+'</div></div>'+mkChips()+'</div>'+
+    '<div class="chips" data-name="qst" style="flex-wrap:nowrap;flex:1;gap:6px">'+[['bought','✓ Выкуплено'],['req',cosm?'Заказано':'Без метража']].map(o=>'<button type="button" class="chip'+(b.status===o[0]?' on':'')+'" data-v="'+o[0]+'" style="flex:1;padding:0 8px;font-size:15px;white-space:nowrap">'+o[1]+'</button>').join('')+'</div></div>'+'</div>'+
     '<div class="qtop"><input class="field" id="q_nm" placeholder="Название" list="dlNames" autocomplete="off" autocapitalize="sentences" enterkeyhint="next"><button class="qcam" data-act="qPhoto" id="q_cam" aria-label="Фото">'+(b.nextPhoto?'<img data-ph="'+b.nextPhoto+'" alt="">':'📷')+'</button></div>'+
     '<div class="qbot"><input class="field" id="q_qty" placeholder="Кол." inputmode="decimal" autocomplete="off" enterkeyhint="next"><input class="field" id="q_sup" placeholder="Поставщик" inputmode="decimal" autocomplete="off" enterkeyhint="next"><input class="field" id="q_pr" placeholder="Клиенту" inputmode="decimal" autocomplete="off" enterkeyhint="done" data-auto="1"><button class="addbtn" data-act="qAdd" aria-label="Добавить">+</button></div>'+F.dl('dlNames',allNames())+
-    '<div class="hint">Название → Кол-во → Цена поставщика → Enter. Цена клиенту подставится по наценке — можно исправить. Цены можно не писать и внести потом в «Цены по накладной».</div>'+
+    '<div class="hint">Название → Кол-во → Цена поставщика → Enter. Затем впишите цену клиенту и Enter. Если цену клиенту не писать — она как у поставщика (без наценки). Цены можно не писать и внести потом в «Цены по накладной».</div>'+
     '<h2 id="q_info" style="margin-top:16px"></h2><div class="list" id="q_list"></div>'+
     '<button class="save" data-act="closeSheet">Готово</button>',
     hooks:{mk:setMarkup},
@@ -692,7 +694,7 @@ function quickAddForm(oid){return ()=>{
       nm.addEventListener('change',()=>{const lp=lastPriceFor(nm.value.trim());if(lp&&!sp.value&&lp.price){sp.value=numS(supOf(lp));if(+lp.price!==supOf(lp)){pr.value=numS(lp.price);pr.dataset.auto='0';}else fill();}});
       nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(nm.value.trim())qt.focus();}});
       qt.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();sp.focus();}});
-      sp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(sp.value&&pr.dataset.auto==='1'&&!mkPct())qAdd();else pr.focus();}});
+      sp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();pr.focus();}});
       pr.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();qAdd();}});
       qt.addEventListener('input',()=>{qt.value=qt.value.replace(/[^\d.,]/g,'');});
       drawQList();setTimeout(()=>nm.focus(),250);
@@ -714,7 +716,7 @@ function qAdd(){
   const nid=uid(),ord=itemsOf(o).reduce((m,i)=>Math.max(m,i.ord||0),0)+1;
   DB.update('orders',o.id,{['items.'+nid]:{name,group:b.group,req:'',qty,unit:b.unit,price:pr_.price,priceSup:pr_.priceSup,status,note:'',ord,created:Date.now(),photo:b.nextPhoto||null}});
   b.added.unshift({id:nid,name,qty,price,sup:pr_.priceSup,unit:b.unit,group:b.group,photo:b.nextPhoto||null});b.nextPhoto=null;const qc=$('#q_cam');if(qc)qc.innerHTML='📷';
-  nm.value='';$('#q_qty').value='';$('#q_sup').value='';$('#q_pr').value='';$('#q_pr').dataset.auto='1';nm.focus();
+  nm.value='';$('#q_qty').value='';$('#q_sup').value='';$('#q_pr').value='';$('#q_pr').placeholder='Клиенту';nm.focus();
   if(navigator.vibrate)navigator.vibrate(10);drawQList();
 }
 /* ---- prices by invoice ---- */
@@ -723,11 +725,11 @@ function pricesForm(oid){return ()=>{
   const cosm=o.type==='cosm',cls='prow two'+(cosm?'':' nock');
   const supV=it=>+it.price||it.priceSup?supOf(it):null;
   return {title:'Цены по накладной',hooks:{mk:setMarkup},body:
-    '<div class="box" id="pp_tot"></div>'+mkChips()+'<div class="hint">Пишите цену поставщика и жмите Enter — цена клиенту подставится по наценке, Enter ещё раз — к следующей позиции. Если цену клиенту не трогать, наценки нет (или по выбранному %).'+(cosm?' Галочка справа — «сверено с накладной».':'')+'</div>'+
+    '<div class="box" id="pp_tot"></div>'+'<div class="hint">Цена поставщика → Enter → впишите цену клиенту → Enter — следующая позиция. Если цену клиенту не менять, она равна цене поставщика (без наценки).'+(cosm?' Галочка справа — «сверено с накладной».':'')+'</div>'+
     '<div class="list" style="margin-top:10px"><div class="'+cls+' head"><div>Товар</div><div>Поставщик</div><div>Клиенту</div>'+(cosm?'<div></div>':'')+'</div>'+items.map((it,k)=>{const sv=supV(it),auto=!(+it.price)||+it.price===sv;
       return '<div class="'+cls+'"><div style="min-width:0"><div class="t" style="font-size:15px;line-height:1.25">'+esc(it.name)+'</div><div class="s" style="margin:2px 0 0">'+(it.qty?nf.format(+it.qty)+' '+esc(it.unit||''):'кол-во?')+(it.group?' · '+esc(it.group):'')+' <span id="pps_'+it.id+'"></span></div></div>'+
       '<input class="field pp" id="ps_'+it.id+'" data-i="'+it.id+'" data-k="'+k+'" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="пост." value="'+(sv?numS(sv):'')+'">'+
-      '<input class="field pc" id="pp_'+it.id+'" data-i="'+it.id+'" data-auto="'+(auto?'1':'0')+'" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="=" value="'+(+it.price?numS(it.price):'')+'">'+
+      '<input class="field pc" id="pp_'+it.id+'" data-i="'+it.id+'" data-auto="'+(auto?'1':'0')+'" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="=" value="'+(+it.price&&!auto?numS(it.price):'')+'">'+
       (cosm?'<button class="ck '+(it.status==='checked'?'v2':'')+'" data-act="ppCheck" data-i="'+it.id+'">'+(it.status==='checked'?'✓✓':'✓')+'</button>':'')+'</div>';}).join('')+'</div>'+
     '<button class="save" data-act="closeSheet">Готово</button>',
     onOpen:()=>{
@@ -764,11 +766,11 @@ function parseList(text){
 function pasteForm(oid){return ()=>{
   const o=order(oid);if(!o)return null;const cur=o.currency||'RUB',cosm=o.type==='cosm';
   return {title:'Вставить список',saveLabel:'Добавить',body:
-    '<div class="hint" style="margin-top:0">Скопируйте сообщение клиента или свой список и вставьте сюда. Каждая позиция — с новой строки. Понимает «Дезодорант 24 350», «Маска 4шт», «Крем 2шт по 250», «Муслин вишня 1 рулон». Две цены через косую: «Дезодорант 24 350/385» — поставщику / клиенту. Одна цена — это цена поставщика, клиенту по наценке.</div>'+
+    '<div class="hint" style="margin-top:0">Скопируйте сообщение клиента или свой список и вставьте сюда. Каждая позиция — с новой строки. Понимает «Дезодорант 24 350», «Маска 4шт», «Крем 2шт по 250», «Муслин вишня 1 рулон». Две цены через косую: «Дезодорант 24 350/385» — поставщику / клиенту. Одна цена — для поставщика и клиента одинаковая.</div>'+
     '<textarea class="field" id="pl_t" style="min-height:160px;margin-top:10px" placeholder="Дезодорант 24 350&#10;Маска 4 190&#10;Пилинг гель 4шт"></textarea>'+
     F.chips('plst','Статус',[['req',cosm?'Заказано':'Запрошено (без метража)'],['bought','✓ Уже выкуплено']],'req')+
     F.text('pl_grp','Контейнер / группа для всех (необязательно)','','','list="dlGroups" autocomplete="off"')+F.dl('dlGroups',allGroups())+
-    mkChips()+'<div id="pl_prev"></div><button class="save" data-act="sheetSave">Добавить позиции</button>',hooks:{mk:setMarkup},
+    '<div id="pl_prev"></div><button class="save" data-act="sheetSave">Добавить позиции</button>',hooks:{mk:setMarkup},
     onOpen:()=>{const t=$('#pl_t');const upd=()=>{const rows=parseList(t.value);const pv=$('#pl_prev');if(!rows.length){pv.innerHTML='';return;}
       pv.innerHTML='<h2>Будет добавлено: '+rows.length+'</h2><div class="card" style="padding:6px 12px"><table class="ptable">'+rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td class="r">'+(r.qty!=null?nf.format(r.qty)+' '+(r.unit||(cosm?'шт':'м')):'<span class="muted">кол-во?</span>')+'</td><td class="r">'+(r.price!=null?nf.format(r.price)+(priceRec(r.price,r.cli).price!==r.price?' → <b>'+nf.format(priceRec(r.price,r.cli).price)+'</b>':''):'<span class="muted">цена?</span>')+'</td></tr>').join('')+'</table></div>';};
       t.addEventListener('input',upd);mkHook=upd;setTimeout(()=>t.focus(),250);},
@@ -930,7 +932,7 @@ function repeatOrder(o){
 function wrapName(s,max){s=String(s||'');return s.length>max?s.slice(0,max-1)+'…':s;}
 function invoiceSVG(o){
   const st=S(),c=calc(o),cur=o.currency||'RUB',cl=o.clientId?client(o.clientId):null,W=900;
-  const T='#4f9aa3',TD='#2e6f78',L='#d5e3e5',TX='#1f2a2d',MU='#6b7b80';
+  const IC=invColors(),T=IC.T,TD=IC.TD,L=IC.L,TX='#1f2a2d',MU='#6b7b80';
   const x=esc,N=v=>nf.format(r2(v));let y=0,out='';const brk=[];
   const txt=(xx,yy,s,o2)=>{o2=o2||{};out+='<text x="'+xx+'" y="'+yy+'" font-size="'+(o2.size||15)+'" font-weight="'+(o2.w||400)+'" fill="'+(o2.fill||TX)+'" text-anchor="'+(o2.a||'start')+'"'+(o2.it?' font-style="italic"':'')+'>'+x(s)+'</text>';};
   const rect=(xx,yy,w,h,f,s)=>{out+='<rect x="'+xx+'" y="'+yy+'" width="'+w+'" height="'+h+'" fill="'+f+'"'+(s?' stroke="'+s+'"':'')+'/>';};
@@ -958,7 +960,7 @@ function invoiceSVG(o){
   rect(40,y,820,30,T);[['НАИМЕНОВАНИЕ',52,'start'],['✓',520,'middle'],['КОЛ-ВО',620,'end'],['ЦЕНА',720,'end'],['СУММА',848,'end']].forEach(h=>txt(h[1],y+20,h[0],{size:12.5,w:700,fill:'#fff',a:h[2]}));y+=30;
   const groups=groupItems(c.items.filter(i=>i.status!=='na'));
   groups.forEach((g,gi)=>{
-    if(g.g){rect(40,y,820,26,'#eef5f6');txt(52,y+18,g.g.toUpperCase(),{size:12.5,w:700,fill:TD});y+=26;}
+    if(g.g){rect(40,y,820,26,IC.G);txt(52,y+18,g.g.toUpperCase(),{size:12.5,w:700,fill:TD});y+=26;}
     g.items.forEach(it=>{const q=+it.qty||0;txt(52,y+21,wrapName(it.name,44),{size:14.5});
       out+='<rect x="511" y="'+(y+7)+'" width="18" height="18" rx="3" fill="'+(isDone(it)?T:'#fff')+'" stroke="'+(isDone(it)?T:'#aab9bc')+'"/>'+(isDone(it)?'<path d="M515 '+(y+16)+'l3.5 3.5 6.5-7" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>':'');
       txt(620,y+21,q?nf.format(q)+' '+(it.unit||''):'—',{size:14.5,a:'end'});txt(720,y+21,N(+it.price||0),{size:14.5,a:'end'});txt(848,y+21,q?N(q*(+it.price||0)):'0',{size:14.5,w:600,a:'end'});y+=32;line(40,y,860,y);brk.push(y+1);});
@@ -969,7 +971,7 @@ function invoiceSVG(o){
   // totals
   const tl=[['ОБЩАЯ СУММА ТОВАРА',c.goods],['Упаковка / тачка / отправка',c.packing],['Доставка / погрузка / пресс',c.delivery],['Комиссия '+nf.format(+o.commission||0)+'%',c.commission]];
   const tx0=470,tw=390;
-  tl.forEach((r,i)=>{rect(tx0,y,tw,30,i===0?'#e3eff1':'#f4f8f9');txt(tx0+12,y+20,r[0],{size:13.5,w:i===0?700:500});txt(tx0+tw-12,y+20,r[1]?N(r[1]):(r[0].startsWith('Доставка')?'после отправки':'0'),{size:14,w:600,a:'end',fill:r[1]?TX:MU});y+=31;});
+  tl.forEach((r,i)=>{rect(tx0,y,tw,30,i===0?IC.G1:IC.G2);txt(tx0+12,y+20,r[0],{size:13.5,w:i===0?700:500});txt(tx0+tw-12,y+20,r[1]?N(r[1]):(r[0].startsWith('Доставка')?'после отправки':'0'),{size:14,w:600,a:'end',fill:r[1]?TX:MU});y+=31;});
   rect(tx0,y,tw,38,T);txt(tx0+12,y+25,'ИТОГО',{size:16,w:700,fill:'#fff'});txt(tx0+tw-12,y+25,N(c.total)+' '+CUR[cur].w,{size:19,w:700,fill:'#fff',a:'end'});
   // footer left
   let fy=y-100;txt(40,fy,'Если есть вопросы, пишите нам',{size:14,fill:MU});
@@ -983,12 +985,23 @@ function invoiceSVG(o){
 const svgOpen=(w,h,vy,vh,W)=>'<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 '+vy+' '+W+' '+vh+'" font-family="-apple-system, Helvetica, Arial, sans-serif">';
 function svgDoc(out,W,H,brk){return {svg:svgOpen(W,H,0,H,W)+'<rect width="'+W+'" height="'+H+'" fill="#fff"/>'+out+'</svg>',body:'<rect y="-50" width="'+W+'" height="'+(H+100)+'" fill="#fff"/>'+out,w:W,h:H,brk:brk||[]};}
 
+/* цвета счёт-фактуры — общие для обоих телефонов (настройка invColor) */
+const INV_COLORS={
+  teal:{T:'#4f9aa3',TD:'#2e6f78',L:'#d5e3e5',G:'#eef5f6',G1:'#e3eff1',G2:'#f4f8f9'},
+  ocean:{T:'#2f74d0',TD:'#1d4f96',L:'#d6e2f3',G:'#edf3fc',G1:'#e1ebf9',G2:'#f4f7fc'},
+  indigo:{T:'#5b55d6',TD:'#3a3399',L:'#dcdbf3',G:'#f0effc',G1:'#e6e5fa',G2:'#f6f6fd'},
+  violet:{T:'#8650e0',TD:'#5a2da3',L:'#e3d9f5',G:'#f4effd',G1:'#ece3fb',G2:'#f8f5fe'},
+  wine:{T:'#b53a68',TD:'#82224a',L:'#f0d8e1',G:'#fbf0f4',G1:'#f7e3eb',G2:'#fcf6f8'},
+  terra:{T:'#c8643a',TD:'#8e3f1e',L:'#f1ddd3',G:'#fcf3ee',G1:'#f8e7de',G2:'#fdf8f5'},
+  emerald:{T:'#1f8a6c',TD:'#0f5c47',L:'#d3e8e0',G:'#edf7f3',G1:'#e0f1ea',G2:'#f4faf7'},
+  graphite:{T:'#3a414c',TD:'#1f242b',L:'#dcdee2',G:'#f1f2f4',G1:'#e6e8eb',G2:'#f6f7f8'}};
+const invColors=()=>INV_COLORS[S().invColor]||INV_COLORS.teal;
 /* ---- счёт поставщику: цены поставщика, без комиссии и оплат клиента ---- */
 let supOpt={f:'all',g:'*',cl:false};
 function supItems(o,opt){return itemsOf(o).filter(it=>it.status!=='na'&&(opt.f==='all'||(opt.f==='done'?isDone(it):!isDone(it)))&&(opt.g==='*'||(it.group||'').trim()===opt.g));}
 function supplierSVG(o,opt){
   const st=S(),cur=o.currency||'RUB',W=900;
-  const T='#4f9aa3',TD='#2e6f78',L='#d5e3e5',TX='#1f2a2d',MU='#6b7b80';
+  const IC=invColors(),T=IC.T,TD=IC.TD,L=IC.L,TX='#1f2a2d',MU='#6b7b80';
   const x=esc,N=v=>nf.format(r2(v));let y=0,out='';const brk=[];
   const txt=(xx,yy,s,o2)=>{o2=o2||{};out+='<text x="'+xx+'" y="'+yy+'" font-size="'+(o2.size||15)+'" font-weight="'+(o2.w||400)+'" fill="'+(o2.fill||TX)+'" text-anchor="'+(o2.a||'start')+'"'+(o2.it?' font-style="italic"':'')+'>'+x(s)+'</text>';};
   const rect=(xx,yy,w,h,f)=>{out+='<rect x="'+xx+'" y="'+yy+'" width="'+w+'" height="'+h+'" fill="'+f+'"/>';};
@@ -1007,7 +1020,7 @@ function supplierSVG(o,opt){
   rect(40,y,820,30,T);[['№',62,'middle'],['НАИМЕНОВАНИЕ',92,'start'],['КОЛ-ВО',600,'end'],['ЦЕНА',720,'end'],['СУММА',848,'end']].forEach(h=>txt(h[1],y+20,h[0],{size:12.5,w:700,fill:'#fff',a:h[2]}));y+=30;
   const groups=opt.g==='*'?groupItems(items):[{g:'',items}];let k=0,tot=0,qtot={};
   groups.forEach((g,gi)=>{
-    if(g.g&&groups.length>1){rect(40,y,820,26,'#eef5f6');txt(52,y+18,g.g.toUpperCase(),{size:12.5,w:700,fill:TD});y+=26;}
+    if(g.g&&groups.length>1){rect(40,y,820,26,IC.G);txt(52,y+18,g.g.toUpperCase(),{size:12.5,w:700,fill:TD});y+=26;}
     g.items.forEach(it=>{k++;const q=+it.qty||0,p=supOf(it);tot+=q*p;if(q){const u=it.unit||'';qtot[u]=(qtot[u]||0)+q;}
       txt(62,y+21,String(k),{size:14,fill:MU,a:'middle'});txt(92,y+21,wrapName(it.name,48),{size:14.5});
       txt(600,y+21,q?nf.format(q)+' '+(it.unit||''):'—',{size:14.5,a:'end'});txt(720,y+21,p?N(p):'—',{size:14.5,a:'end'});txt(848,y+21,q&&p?N(q*p):'—',{size:14.5,w:600,a:'end'});y+=32;line(40,y,860,y);brk.push(y+1);});
@@ -1015,7 +1028,7 @@ function supplierSVG(o,opt){
   });
   if(!items.length){txt(52,y+22,'Нет позиций по выбранному фильтру',{size:14,fill:MU});y+=34;}
   y+=18;const tx0=470,tw=390;
-  rect(tx0,y,tw,30,'#f4f8f9');txt(tx0+12,y+20,'Позиций',{size:13.5,w:500});txt(tx0+tw-12,y+20,String(k)+(Object.keys(qtot).length?' · '+Object.keys(qtot).map(u=>nf.format(r2(qtot[u]))+' '+u).join(', '):''),{size:14,w:600,a:'end'});y+=31;
+  rect(tx0,y,tw,30,IC.G2);txt(tx0+12,y+20,'Позиций',{size:13.5,w:500});txt(tx0+tw-12,y+20,String(k)+(Object.keys(qtot).length?' · '+Object.keys(qtot).map(u=>nf.format(r2(qtot[u]))+' '+u).join(', '):''),{size:14,w:600,a:'end'});y+=31;
   rect(tx0,y,tw,38,T);txt(tx0+12,y+25,'ИТОГО',{size:16,w:700,fill:'#fff'});txt(tx0+tw-12,y+25,N(tot)+' '+CUR[cur].w,{size:19,w:700,fill:'#fff',a:'end'});
   txt(40,y+25,'Спасибо за сотрудничество!',{size:18,w:700,fill:TD});
   y+=38+36;
@@ -1143,6 +1156,7 @@ const A={
   sharePdf:async()=>{const o=order(invOpen);if(!o)return;toast('Готовлю PDF…');try{const r=curInvoice(o);if(invMode==='sup'&&!r.n){alert('Нет позиций по выбранному фильтру');return;}const blob=await svgToPdf(r);await shareBlob(invFileName(o,'pdf'),blob);}catch(e){alert('Не удалось создать PDF: '+(e.message||e));}},
   supInvoice:d=>showInvoice(d.id,'sup'),
   editTheme:()=>pushSheet(themeForm()),
+  invPreview:()=>{const os=orders().slice().sort((a,b)=>(b.created||0)-(a.created||0));if(!os.length){alert('Пока нет заказов — счёт покажется, когда появится первый заказ');return;}closeAll();showInvoice(os[0].id);},
   setTheme:d=>{try{localStorage.setItem('zakup_theme',d.v);}catch(e){}applyTheme();$$('#panel .thc').forEach(b=>b.classList.toggle('on',b.dataset.v===d.v));renderMain();},
   buyOrder:d=>{ui.buyOrder=d.v;renderMain();},
   buyToggle:()=>{ui.buyShowDone=!ui.buyShowDone;renderMain();},
