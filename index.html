@@ -77,6 +77,7 @@ input[type=date].field{line-height:48px;text-align:left}
 input::-webkit-date-and-time-value{text-align:left}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:50px;border-radius:12px;background:var(--card);color:var(--accent);font-size:17px;font-weight:600;padding:0 14px;box-shadow:var(--shadow);text-align:center}
 .btn:active{opacity:.7}
+a.btn{text-decoration:none}
 .btn.primary{background:var(--accent);color:#fff;box-shadow:none}
 .btn.green{background:var(--green);color:#fff;box-shadow:none}
 .btn.danger{color:var(--red)}
@@ -195,6 +196,14 @@ details.more[open]{padding-bottom:12px}
 .prow.head{padding-top:4px;padding-bottom:4px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;text-align:right}
 .prow.head div:first-child{text-align:left}
 .mkup{color:var(--pos,#1a7f45);font-weight:600}
+.shrow .th{width:54px;height:54px;border-radius:10px;overflow:hidden;flex:none;background:var(--chip)}
+.shrow .th img{width:100%;height:100%;object-fit:cover}
+.phstrip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 6px;margin-top:6px}
+.phstrip .ph{position:relative;flex:none;width:92px;height:92px;border-radius:12px;overflow:hidden;background:var(--chip)}
+.phstrip .ph img{width:100%;height:100%;object-fit:cover}
+.phstrip .ph .x{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:13px;background:rgba(0,0,0,.6);color:#fff;font-size:16px;text-align:center;line-height:26px}
+.phstrip .ph .m{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:6px;padding:2px 6px}
+.phstrip .add{flex:none;width:92px;height:92px;border-radius:12px;border:2px dashed var(--line);color:var(--accent);font-size:14px;font-weight:600;text-align:center;line-height:1.3}
 .thgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
 .thc{border-radius:16px;padding:12px;border:2px solid var(--line);text-align:left;box-shadow:var(--shadow)}
 .thc.on{border-color:var(--text)}
@@ -252,7 +261,7 @@ details.more[open]{padding-bottom:12px}
 <div class="sheet" id="sheet"><div class="backdrop" data-act="closeSheet"></div><div class="panel" id="panel"></div></div>
 <div class="inv" id="inv"></div>
 <div class="pv" id="pv"><div class="vb"><button data-act="closePhoto">Закрыть</button><button id="pvDel">Удалить фото</button></div><img id="pvImg" alt=""></div>
-<input type="file" id="phInput" accept="image/*" hidden>
+<input type="file" id="phInput" accept="image/*" hidden><input type="file" id="shInput" accept="image/*" multiple hidden>
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -304,7 +313,7 @@ const DEFAULT_SETTINGS={brand:'dordoi.confidence',instagram:'dordoi.confidence',
 const UNIT_MAP=[[/^(шт|штук|штуки|штука|бут)/i,'шт'],[/^(уп|упак)/i,'уп'],[/^пач/i,'пач'],[/^(м|метр)/i,'м'],[/^рул/i,'рул'],[/^кг/i,'кг']];
 
 /* ============ data layer: Firebase or local demo ============ */
-const cache={orders:{},clients:{},meta:{}};
+const cache={orders:{},clients:{},meta:{},shop:{}};
 const DEL={__del:1};
 let mode=FIREBASE_CONFIG?'cloud':'local',fb=null,me=null,authReady=false,local=null;
 const LKEY='zakup_local_v1';
@@ -314,12 +323,12 @@ function fbVal(v){if(v===DEL)return fb.deleteField();if(v&&typeof v==='object'&&
 const onErr=e=>{console.error(e);toast(e&&e.code==='permission-denied'?'Нет доступа: эта почта не добавлена в правила':'Ошибка сохранения: '+(e&&e.message||e));};
 const DB={
   set(coll,id,data){data=Object.assign({},data,{updatedAt:Date.now(),updatedBy:me?me.email:''});
-    if(mode==='local'){local[coll][id]=clone(data);cache[coll][id]=clone(data);localSave();scheduleRender();return;}
+    if(mode==='local'){(local[coll]=local[coll]||{})[id]=clone(data);(cache[coll]=cache[coll]||{})[id]=clone(data);localSave();scheduleRender();return;}
     fb.setDoc(fb.doc(fb.db,coll,id),fbVal(data)).catch(onErr);},
   update(coll,id,patch){patch=Object.assign({},patch,{updatedAt:Date.now(),updatedBy:me?me.email:''});
-    if(mode==='local'){const d=local[coll][id];if(!d)return;for(const k in patch)setPath(d,k,patch[k]);cache[coll][id]=clone(d);localSave();scheduleRender();return;}
+    if(mode==='local'){const d=(local[coll]||{})[id];if(!d)return;for(const k in patch)setPath(d,k,patch[k]);cache[coll][id]=clone(d);localSave();scheduleRender();return;}
     const p={};for(const k in patch)p[k]=fbVal(patch[k]);fb.updateDoc(fb.doc(fb.db,coll,id),p).catch(onErr);},
-  remove(coll,id){if(mode==='local'){delete local[coll][id];delete cache[coll][id];localSave();scheduleRender();return;}fb.deleteDoc(fb.doc(fb.db,coll,id)).catch(onErr);},
+  remove(coll,id){if(mode==='local'){if(local[coll])delete local[coll][id];if(cache[coll])delete cache[coll][id];localSave();scheduleRender();return;}fb.deleteDoc(fb.doc(fb.db,coll,id)).catch(onErr);},
 };
 /* ---- photos: separate collection, compressed ---- */
 const photoCache={};
@@ -341,7 +350,7 @@ async function initData(){
   if(mode==='local'){
     try{local=JSON.parse(localStorage.getItem(LKEY));}catch(e){}
     if(!local||!local.orders)local={orders:{},clients:{},meta:{}};
-    cache.orders=clone(local.orders);cache.clients=clone(local.clients);cache.meta=clone(local.meta||{});
+    cache.orders=clone(local.orders);cache.clients=clone(local.clients);cache.meta=clone(local.meta||{});cache.shop=clone(local.shop||{});
     me={email:'demo',uid:'demo'};authReady=true;
     if(!cache.meta.settings){DB.set('meta','settings',Object.assign(clone(DEFAULT_SETTINGS),{owners:['demo'],staff:{demo:'Эржигит'}}));}
     renderAll();return;
@@ -356,12 +365,12 @@ async function initData(){
   let unsubs=[];
   fb.onAuthStateChanged(fb.auth,user=>{
     unsubs.forEach(u=>u());unsubs=[];
-    if(!user){me=null;authReady=true;cache.orders={};cache.clients={};cache.meta={};renderAll();return;}
+    if(!user){me=null;authReady=true;cache.orders={};cache.clients={};cache.meta={};cache.shop={};renderAll();return;}
     me={email:(user.email||'').toLowerCase(),uid:user.uid};authReady=true;
     const sub=(coll)=>fb.onSnapshot(fb.collection(fb.db,coll),snap=>{const o={};snap.forEach(d=>{o[d.id]=d.data();});cache[coll]=o;
       if(coll==='meta'&&!o.settings&&!snap.metadata.fromCache){DB.set('meta','settings',Object.assign(clone(DEFAULT_SETTINGS),{owners:OWNER_EMAILS.slice(),staff:Object.assign({[me.email]:me.email.split('@')[0]},STAFF_NAMES)}));}
       scheduleRender();},onErr);
-    unsubs=[sub('orders'),sub('clients'),sub('meta')];
+    unsubs=[sub('orders'),sub('clients'),sub('meta'),sub('shop')];
     renderAll();
   });
 }
@@ -550,6 +559,7 @@ function renderMore(){
     rowBtn('editDefaults','⚙️','По умолчанию','Комиссия '+nf.format(st.commission)+'%, упаковка '+nf.format(st.packing)+', курсы')+
     (isOwner()?rowBtn('editStaff','👥','Сотрудники','Имена в счёте и кто владелец'):'')+
     rowBtn('editTheme','🎨','Оформление',THEMES[themeGet().t].n+' · '+{auto:'как в телефоне',light:'светлая',dark:'тёмная'}[themeGet().m])+
+    '</div><h2>Сайт для клиентов</h2><div class="list">'+rowBtn('openShop','🛍','Витрина на сайте',Object.keys(cache.shop||{}).length?Object.values(cache.shop).filter(x=>!x.hidden).length+' товаров на сайте':'Товары с фото — клиенты пишут в WhatsApp или Telegram')+
     '</div><h2>Данные</h2><div class="list">'+rowBtn('exportJson','💾','Скачать копию всех данных','Файл JSON на всякий случай')+
     (mode==='local'?rowBtn('importJson','📥','Загрузить копию','Из файла JSON'):'')+'</div>';
   if(mode==='cloud')h+='<div class="btns" style="margin-top:22px"><button class="btn danger" data-act="logout">Выйти</button></div>';
@@ -566,6 +576,78 @@ function themeForm(){return ()=>{const g=themeGet();
     '<div class="btns" style="margin-top:10px"><button class="btn" data-act="invPreview">📄 Посмотреть счёт</button></div>'+
     '<div class="hint">Цвет приложения и тема — свои на каждом телефоне. Цвет счёт-фактуры общий: клиенты и поставщики получат счёт одного цвета с любого телефона.</div><button class="save" data-act="closeSheet">Готово</button>',
     hooks:{invc:v=>{if(!cache.meta.settings)cache.meta.settings={};cache.meta.settings.invColor=v;DB.update('meta','settings',{invColor:v});toast('Счёт-фактура: '+THEMES[v].n);},thm:v=>{try{localStorage.setItem('zakup_mode',v);}catch(e){}applyTheme();renderMain();}}};};}
+/* ============ витрина (сайт) ============ */
+const SHOP_CATS={fabric:'Ткани',cosm:'Косметика',cloth:'Одежда'};
+const SHOP_AV={yes:'В наличии',order:'Под заказ',no:'Нет в наличии'};
+const SITE_DEF='https://dordoiconfidence-oss.github.io/';
+const shopSet=()=>Object.assign({site:SITE_DEF,wa:'996220276236',tg:'',tgc:'',about:'Ткани, косметика и одежда с рынков Москвы — подберём и отправим в ваш город.'},S().shop||{});
+const shopItems=()=>Object.entries(cache.shop||{}).map(([id,v])=>Object.assign({id},v)).sort((a,b)=>(b.ord||0)-(a.ord||0));
+let shopFilter='all',pubT=null;
+function schedulePublish(){clearTimeout(pubT);pubT=setTimeout(publishShop,1200);}
+function publishShop(){
+  const st=S(),sh=shopSet();
+  const items=shopItems().filter(x=>!x.hidden).map(x=>({id:x.id,code:x.code||0,name:x.name||'',cat:x.cat||'cosm',desc:x.desc||'',sizes:x.sizes||'',colors:x.colors||'',avail:x.avail||'yes',thumb:x.thumb||'',nph:x.nph||0,created:x.created||0}));
+  const pages=[];let cur=[],len=0;items.forEach(it=>{const l=JSON.stringify(it).length+50;if(cur.length&&len+l>850000){pages.push(cur);cur=[];len=0;}cur.push(it);len+=l;});if(cur.length||!pages.length)pages.push(cur);
+  pages.forEach((p,i)=>DB.set('pub','p'+i,{items:p}));
+  DB.set('pub','meta',{pages:pages.length,count:items.length,brand:st.brand||'',instagram:st.instagram||'',wa:(sh.wa||'').replace(/\D/g,''),tg:(sh.tg||'').replace(/^@|^https?:\/\/t\.me\//,''),tgc:sh.tgc||'',about:sh.about||'',accent:invColors().T,updated:Date.now()});
+}
+function shopList(){return detail(()=>{
+  const all=shopItems(),sh=shopSet();const list=all.filter(x=>shopFilter==='all'||x.cat===shopFilter);
+  const cnt=k=>all.filter(x=>x.cat===k).length;
+  return {title:'Витрина на сайте',body:
+    '<div class="btns two" style="margin-top:0"><a class="btn primary" href="'+esc(sh.site)+'" target="_blank" rel="noopener">🌐 Открыть сайт</a><button class="btn" data-act="shopShare">🔗 Ссылка</button></div>'+
+    '<div class="btns two"><button class="btn primary" data-act="shopAdd">+ Товар</button><button class="btn" data-act="shopSettings">⚙️ Контакты</button></div>'+
+    '<div class="pchips" style="margin-top:14px">'+[['all','Все',all.length]].concat(Object.keys(SHOP_CATS).map(k=>[k,SHOP_CATS[k],cnt(k)])).map(c=>'<button class="pchip'+(shopFilter===c[0]?' on':'')+'" data-act="shopFilt" data-v="'+c[0]+'">'+c[1]+'<span class="c">'+c[2]+'</span></button>').join('')+'</div>'+
+    (list.length?'<div class="list">'+list.map(x=>'<button class="row shrow" data-act="shopEdit" data-id="'+x.id+'"><div class="th">'+(x.thumb?'<img src="'+x.thumb+'" alt="">':'')+'</div><div class="grow"><div class="t ell">'+esc(x.name||'Без названия')+'</div><div class="s">Арт. '+(x.code||'—')+' · '+SHOP_CATS[x.cat||'cosm']+(x.avail&&x.avail!=='yes'?' · '+SHOP_AV[x.avail]:'')+'</div></div>'+(x.hidden?'<span class="badge m">скрыт</span>':'')+'<span class="chev">›</span></button>').join('')+'</div>'
+      :'<div class="card empty"><div class="e">🛍</div>Добавьте товары с фото — они сразу появятся на сайте. Цены на сайте не показываются: клиент пишет вам в WhatsApp или Telegram.</div>')+
+    '<div class="hint">Сайт обновляется сам через пару секунд после сохранения. Товар можно отправить на витрину и из заказа: откройте позицию → «🛍 На витрину».</div>'};
+});}
+let shopPh=null;
+function shopForm(id,preset){return ()=>{
+  const x=id?(cache.shop||{})[id]:null;if(id&&!x)return null;
+  const d=Object.assign({name:'',cat:'cosm',desc:'',sizes:'',colors:'',avail:'yes',hidden:false},x||{},preset||{});
+  if(!shopPh||shopPh.id!==(id||'new')){shopPh={id:id||'new',list:(preset&&preset.photos)||[],loaded:!id,changed:!!(preset&&preset.photos&&preset.photos.length)};
+    if(id)loadShopPhotos(id).then(l=>{if(shopPh&&shopPh.id===id&&!shopPh.changed){shopPh.list=l;shopPh.loaded=true;drawShopPh();}});}
+  return {title:x?'Товар на сайте':'Новый товар',saveLabel:'Готово',body:
+    '<label class="fl">Фото (первое — главное)</label><div class="phstrip" id="shph"></div>'+
+    F.text('sh_nm','Название',d.name,'Например: Муслин вишня','autocapitalize="sentences"')+
+    F.chips('shcat','Раздел',Object.keys(SHOP_CATS).map(k=>[k,SHOP_CATS[k]]),d.cat)+
+    F.area('sh_desc','Описание',d.desc,'Состав, ширина, объём, страна… Цену не пишите — её уточнят у вас')+
+    '<div id="shcl" style="'+(d.cat==='cloth'?'':'display:none')+'"><div class="two-col"><div>'+F.text('sh_sz','Размеры',d.sizes,'42–50')+'</div><div>'+F.text('sh_col','Цвета',d.colors,'чёрный, бежевый')+'</div></div></div>'+
+    F.chips('shav','Наличие',Object.keys(SHOP_AV).map(k=>[k,SHOP_AV[k]]),d.avail)+
+    F.chips('shvis','Показывать на сайте',[['yes','Да'],['no','Скрыть']],d.hidden?'no':'yes')+
+    '<button class="save" data-act="sheetSave">Сохранить</button>'+(x?'<div class="btns"><button class="btn danger" data-act="shopDel" data-id="'+id+'">Удалить с сайта</button></div>':''),
+    hooks:{shcat:v=>show('shcl',v==='cloth')},
+    onOpen:()=>{drawShopPh();if(!x&&!d.name)setTimeout(()=>{const e=$('#sh_nm');if(e)e.focus();},250);},
+    onSave:async()=>{const name=val('sh_nm');if(!name){shakeEl('sh_nm');return false;}
+      if(!shopPh.loaded){toast('Фото ещё загружаются…');return false;}
+      const nid=id||'s'+uid();const all=shopItems();
+      const rec=Object.assign({},x||{},{name,cat:chipVal('shcat')||'cosm',desc:val('sh_desc'),sizes:val('sh_sz'),colors:val('sh_col'),avail:chipVal('shav')||'yes',hidden:chipVal('shvis')==='no'});
+      if(!x){rec.code=all.reduce((m,i)=>Math.max(m,i.code||0),0)+1;rec.created=Date.now();rec.ord=Date.now();}
+      if(shopPh.changed){rec.nph=shopPh.list.length;rec.thumb=shopPh.list.length?await shrinkDataUrl(shopPh.list[0],480,0.6):'';DB.set('pubPhotos',nid,{data:shopPh.list});}
+      DB.set('shop',nid,rec);shopPh=null;schedulePublish();toast(x?'Сохранено — сайт обновится':'Товар добавлен на сайт');}
+  };
+};}
+async function loadShopPhotos(id){if(mode==='local')return ((local.pubPhotos||{})[id]||{}).data||[];try{const s=await fb.getDoc(fb.doc(fb.db,'pubPhotos',id));return s.exists()?(s.data().data||[]):[];}catch(e){return [];}}
+function shrinkDataUrl(src,max,q){return new Promise(res=>{const img=new Image();img.onload=()=>{const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',q));};img.onerror=()=>res('');img.src=src;});}
+function drawShopPh(){const el=$('#shph');if(!el||!shopPh)return;
+  el.innerHTML=(shopPh.loaded?'':'<div class="ph" style="display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)">загрузка…</div>')+shopPh.list.map((u,i)=>'<div class="ph"><img src="'+u+'" alt="">'+(i===0?'<span class="m">главное</span>':'<button class="m" data-act="shopPhMain" data-i="'+i+'" style="border:none">сделать главным</button>')+'<button class="x" data-act="shopPhDel" data-i="'+i+'">×</button></div>').join('')+
+    (shopPh.list.length<6?'<button class="add" data-act="shopPhAdd">+<br>Фото</button>':'');}
+async function shopPhAdd(){const inp=$('#shInput');inp.value='';inp.onchange=async()=>{const fs=Array.from(inp.files||[]).slice(0,6-shopPh.list.length);if(!fs.length)return;toast('Сжимаю фото…');
+  for(const f of fs){try{shopPh.list.push(await compressImage(f,1000,0.66));}catch(e){}}
+  // весь набор фото товара должен поместиться в один документ (< 1 МБ)
+  let tot=shopPh.list.reduce((a,u)=>a+u.length,0),q=0.6,mx=900;while(tot>900000&&q>0.3){shopPh.list=await Promise.all(shopPh.list.map(u=>shrinkDataUrl(u,mx,q)));tot=shopPh.list.reduce((a,u)=>a+u.length,0);q-=0.08;mx-=100;}
+  shopPh.changed=true;shopPh.loaded=true;drawShopPh();};inp.click();}
+function shopSettingsForm(){return ()=>{const sh=shopSet();
+  return {title:'Контакты на сайте',saveLabel:'Готово',body:
+    F.text('ss_wa','WhatsApp (номер)',sh.wa,'996220276236','inputmode="tel"')+
+    F.text('ss_tg','Telegram для сообщений (ник)',sh.tg,'например: dordoi_confidence','autocapitalize="off"')+
+    F.text('ss_tgc','Telegram-канал (ссылка, можно потом)',sh.tgc,'https://t.me/…','autocapitalize="off"')+
+    F.area('ss_about','Пара слов о вас (под названием)',sh.about,'')+
+    F.text('ss_site','Адрес сайта',sh.site,SITE_DEF,'autocapitalize="off"')+
+    '<div class="hint">Название и Instagram берутся из настроек счёт-фактуры, цвет сайта — из цвета счёт-фактуры.</div><button class="save" data-act="sheetSave">Сохранить</button>',
+    onSave:()=>{const shop={wa:val('ss_wa').replace(/\D/g,''),tg:val('ss_tg').replace(/^@/,''),tgc:val('ss_tgc'),about:val('ss_about'),site:val('ss_site')||SITE_DEF};
+      if(!cache.meta.settings)cache.meta.settings={};cache.meta.settings.shop=shop;DB.update('meta','settings',{shop});schedulePublish();toast('Сохранено — сайт обновится');}};};}
 /* ============ sheets ============ */
 const stack=[];let hooks={},curSave=null;
 function pushSheet(fn){stack.push(fn);drawSheet(true);}
@@ -651,7 +733,7 @@ function itemForm(oid,iid,preset){return ()=>{
     F.text('f_note','Заметка',d.note,'Необязательно')+'</details>'+
     '<button class="save" data-act="sheetSave">Сохранить</button>'+
     (it?'':'<div class="btns"><button class="btn" data-act="sheetSaveMore">Сохранить и добавить ещё</button></div>')+
-    (it?'<div class="btns"><button class="btn danger" data-act="delItem" data-o="'+oid+'" data-i="'+iid+'">Удалить позицию</button></div>':''),
+    (it?'<div class="btns"><button class="btn" data-act="toShop" data-o="'+oid+'" data-i="'+iid+'">🛍 На витрину сайта</button><button class="btn danger" data-act="delItem" data-o="'+oid+'" data-i="'+iid+'">Удалить позицию</button></div>':''),
     hooks:{mk:setMarkup},
     onOpen:()=>{
       const upd=()=>{const q=num(val('f_qty')),sp=num(val('f_sup')),r=priceRec(sp,num(val('f_pr'))),sb=$('#sumBox');if(q&&r.price){sb.style.display='';sb.innerHTML='Клиенту: <b>'+money(q*r.price,cur)+'</b>'+(sp!=null&&r.price!==sp?' · поставщику '+money(q*sp,cur)+' · <span class="mkup">наценка '+money(q*(r.price-sp),cur)+'</span>':'');}else sb.style.display='none';};
@@ -1156,6 +1238,18 @@ const A={
   sharePdf:async()=>{const o=order(invOpen);if(!o)return;toast('Готовлю PDF…');try{const r=curInvoice(o);if(invMode==='sup'&&!r.n){alert('Нет позиций по выбранному фильтру');return;}const blob=await svgToPdf(r);await shareBlob(invFileName(o,'pdf'),blob);}catch(e){alert('Не удалось создать PDF: '+(e.message||e));}},
   supInvoice:d=>showInvoice(d.id,'sup'),
   editTheme:()=>pushSheet(themeForm()),
+  openShop:()=>pushSheet(shopList()),
+  shopFilt:d=>{shopFilter=d.v;refreshSheet();},
+  shopAdd:()=>{shopPh=null;pushSheet(shopForm(null));},
+  shopEdit:d=>{shopPh=null;pushSheet(shopForm(d.id));},
+  shopSettings:()=>pushSheet(shopSettingsForm()),
+  shopShare:()=>shareText(shopSet().site),
+  shopPhAdd:()=>shopPhAdd(),
+  shopPhDel:d=>{shopPh.list.splice(+d.i,1);shopPh.changed=true;drawShopPh();},
+  shopPhMain:d=>{const u=shopPh.list.splice(+d.i,1)[0];shopPh.list.unshift(u);shopPh.changed=true;drawShopPh();},
+  shopDel:d=>{if(!confirm('Убрать товар с сайта насовсем?'))return;DB.remove('shop',d.id);DB.remove('pubPhotos',d.id);shopPh=null;popSheet();schedulePublish();toast('Удалено с сайта');},
+  toShop:async d=>{const o=order(d.o),it=o&&(o.items||{})[d.i];if(!it)return;const ph=it.photo?await getPhoto(it.photo):null;shopPh=null;
+    pushSheet(shopForm(null,{name:it.name||'',cat:o.type==='cosm'?'cosm':'fabric',photos:ph?[ph]:[]}));},
   invPreview:()=>{const os=orders().slice().sort((a,b)=>(b.created||0)-(a.created||0));if(!os.length){alert('Пока нет заказов — счёт покажется, когда появится первый заказ');return;}closeAll();showInvoice(os[0].id);},
   setTheme:d=>{try{localStorage.setItem('zakup_theme',d.v);}catch(e){}applyTheme();$$('#panel .thc').forEach(b=>b.classList.toggle('on',b.dataset.v===d.v));renderMain();},
   buyOrder:d=>{ui.buyOrder=d.v;renderMain();},
