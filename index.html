@@ -637,12 +637,8 @@ async function loadShopPhotos(id){if(mode==='local')return ((local.pubPhotos||{}
 function shrinkDataUrl(src,max,q){return new Promise(res=>{const img=new Image();img.onload=()=>{const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',q));};img.onerror=()=>res('');img.src=src;});}
 function drawShopPh(){const el=$('#shph');if(!el||!shopPh)return;
   el.innerHTML=(shopPh.loaded?'':'<div class="ph" style="display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)">загрузка…</div>')+shopPh.list.map((u,i)=>'<div class="ph"><img src="'+u+'" alt="">'+(i===0?'<span class="m">главное</span>':'<button class="m" data-act="shopPhMain" data-i="'+i+'" style="border:none">сделать главным</button>')+'<button class="x" data-act="shopPhDel" data-i="'+i+'">×</button></div>').join('')+
-    (shopPh.list.length<6?'<button class="add" data-act="shopPhAdd">+<br>Фото</button>':'');}
-async function shopPhAdd(){const inp=$('#shInput');inp.value='';inp.onchange=async()=>{const fs=Array.from(inp.files||[]).slice(0,6-shopPh.list.length);if(!fs.length)return;toast('Сжимаю фото…');
-  for(const f of fs){try{shopPh.list.push(await compressImage(f,1000,0.66));}catch(e){}}
-  // весь набор фото товара должен поместиться в один документ (< 1 МБ)
-  let tot=shopPh.list.reduce((a,u)=>a+u.length,0),q=0.6,mx=900;while(tot>900000&&q>0.3){shopPh.list=await Promise.all(shopPh.list.map(u=>shrinkDataUrl(u,mx,q)));tot=shopPh.list.reduce((a,u)=>a+u.length,0);q-=0.08;mx-=100;}
-  shopPh.changed=true;shopPh.loaded=true;drawShopPh();};inp.click();}
+    (shopPh.list.length<PH_MAX?'<button class="add" data-act="shopPhAdd">+<br>Фото</button>':'');}
+function shopPhAdd(){galleryAdd(shopPh,drawShopPh);}
 function shopSettingsForm(){return ()=>{const sh=shopSet();
   return {title:'Контакты на сайте',saveLabel:'Готово',body:
     F.text('ss_wa','WhatsApp (номер)',sh.wa,'996220276236','inputmode="tel"')+
@@ -682,7 +678,11 @@ function catalogList(){
     e.hist.push(h);
     const s=e.sups[gk]||(e.sups[gk]={gk,g:g||'Поставщик не указан',n:0,last:null});s.n++;if(!s.last||d>=s.last.d)s.last=h;
   }));
+  // товары, добавленные вручную (ещё не было в заказах)
+  Object.keys(meta).forEach(k=>{const m=meta[k];if(!m||!m.manual||m.mergeTo||map[k])return;
+    map[k]={key:k,keys:{[k]:1},names:{[m.title||k.slice(2)]:1},hist:[],sups:{},ords:{},photo:null,pd:'',unit:'',ud:'',type:m.cat==='cosm'?'cosm':'fabric',td:''};});
   const list=Object.values(map).map(e=>{const m=meta[e.key]||{};
+    e.thumb=m.thumb||'';e.avail=m.avail||'yes';e.tg=m.tg||{};e.posted=m.posted||0;e.manual=!!m.manual;
     // название: самое частое написание из самой частой формы; с заглавной буквы лучше
     const bestK=Object.keys(e.keys).sort((a,b)=>e.keys[b]-e.keys[a]||(a===e.key?-1:b===e.key?1:0))[0];
     const sp=Object.entries(e.names).filter(([n])=>ckOf(n)===bestK).sort((a,b)=>b[1]-a[1]||(/^[A-ZА-ЯЁ]/.test(b[0])?1:0)-(/^[A-ZА-ЯЁ]/.test(a[0])?1:0));
@@ -731,9 +731,9 @@ function ctRows(){
   if(!list.length)return '<div class="card empty"><div class="e">📚</div>'+(catalogList().length?'Ничего не найдено':'Справочник пока пуст. Он наполняется сам: каждая позиция, которую вы вносите в заказы, попадает сюда.')+'</div>';
   return '<div class="list">'+list.map(e=>{const on=ctS.sel&&ctS.sel.has(e.key),sh=shopFor(e.key),l=e.last;
     return '<button class="row shrow" data-act="'+(ctS.sel?'ctToggle':'ctOpen')+'" data-k="'+esc(e.key)+'">'+(ctS.sel?'<span class="ck'+(on?' on':'')+'" style="width:34px;height:34px;font-size:16px">✓</span>':'')+
-      '<div class="th">'+(e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:24px;line-height:54px;text-align:center">'+catIc(e.cat)+'</div>')+'</div>'+
+      '<div class="th">'+(e.thumb?'<img src="'+e.thumb+'" alt="">':e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:24px;line-height:54px;text-align:center">'+catIc(e.cat)+'</div>')+'</div>'+
       '<div class="grow"><div class="t ell">'+esc(e.name)+'</div><div class="s ell">'+esc([l&&l.sup!=null?histPrice(l):'',l&&l.g?l.g:''].filter(Boolean).join(' · ')||'цены ещё нет')+'</div>'+
-      '<div class="s">'+esc(SHOP_CATS[e.cat]+' · '+e.cnt+' '+plural(e.cnt,'заказ','заказа','заказов')+(e.supList.filter(s=>s.gk!=='_').length>1?' · '+e.supList.filter(s=>s.gk!=='_').length+' поставщ.':''))+(sh?' <span class="badge '+(sh.hidden?'m':'g')+'">'+(sh.hidden?'скрыт на сайте':'на сайте')+'</span>':'')+'</div></div>'+(ctS.sel?'':'<span class="chev">›</span>')+'</button>';}).join('')+'</div>';
+      '<div class="s">'+esc(SHOP_CATS[e.cat]+' · '+e.cnt+' '+plural(e.cnt,'заказ','заказа','заказов')+(e.supList.filter(s=>s.gk!=='_').length>1?' · '+e.supList.filter(s=>s.gk!=='_').length+' поставщ.':''))+(sh?' <span class="badge '+(sh.hidden?'m':'g')+'">'+(sh.hidden?'скрыт на сайте':'на сайте')+'</span>':'')+(e.posted?' <span class="badge b">в канале</span>':'')+'</div></div>'+(ctS.sel?'':'<span class="chev">›</span>')+'</button>';}).join('')+'</div>';
 }
 function catalogSheet(){return detail(()=>{
   const all=catalogList(),cnt=k=>all.filter(e=>e.cat===k).length,onSite=all.filter(e=>shopFor(e.key)).length;
@@ -742,16 +742,17 @@ function catalogSheet(){return detail(()=>{
   return {title:'Номенклатура',body:
     '<input class="field" id="ctq" type="search" placeholder="🔍 Товар или поставщик" value="'+esc(ctS.q)+'" autocomplete="off">'+
     '<div class="pchips" style="margin-top:10px">'+chips.map(c=>'<button class="pchip'+(ctS.cat===c[0]?' on':'')+'" data-act="ctCat" data-v="'+c[0]+'">'+c[1]+'<span class="c">'+c[2]+'</span></button>').join('')+'</div>'+
+    (ctS.sel?'':'<div class="btns two" style="margin-top:0"><button class="btn primary" data-act="ctAdd">+ Товар</button><button class="btn" data-act="tgSettings">📢 Канал</button></div>')+
     (all.length?(ctS.sel?'<div class="btns two" style="margin-top:0"><button class="btn" data-act="ctSelAll">Выбрать все показанные</button><button class="btn" data-act="ctSelOff">Отмена</button></div>':'<div class="btns" style="margin-top:0"><button class="btn" data-act="ctSelOn">☑️ Выбрать товары для публикации</button></div>'):'')+
     '<div id="ctList" style="margin-top:10px">'+ctRows()+'</div>'+
-    (ctS.sel?'<div style="position:sticky;bottom:0;padding:10px 0 4px;background:var(--bg)"><button class="btn primary" data-act="ctPublish"'+(n?'':' style="opacity:.5"')+'>🛍 На сайт: '+n+' '+plural(n,'товар','товара','товаров')+'</button><div class="hint" style="text-align:center;margin-top:6px">Telegram-канал и ВК добавим следующими шагами</div></div>':
+    (ctS.sel?(()=>{const nf_=Array.from(ctS.sel).map(k=>catEntry(k)).filter(e=>e&&e.cat==='fabric').length;return '<div style="position:sticky;bottom:0;padding:10px 0 4px;background:var(--bg)"><div class="btns two" style="margin-top:0"><button class="btn primary" data-act="ctPublish"'+(n?'':' style="opacity:.5"')+'>🛍 На сайт: '+n+'</button><button class="btn primary" data-act="ctTgSel"'+(nf_?'':' style="opacity:.5"')+'>📢 В канал: '+nf_+'</button></div><div class="hint" style="text-align:center;margin-top:6px">В канал уходят только ткани · ВК добавим следующим шагом</div></div>';})():
     '<div class="hint">Справочник собирается сам из позиций заказов. Одинаковые названия склеиваются автоматически, похожие — в карточке товара кнопкой «Склеить». Цены видны по каждому поставщику.</div>')};
 });}
 async function ctPublish(){
   if(pubBusy){toast('Подождите — ещё публикую '+pubBusy.done+' из '+pubBusy.total);return;}
   const keys=Array.from(ctS.sel||[]);if(!keys.length){toast('Отметьте товары галочками');return;}
   const es=keys.map(k=>catEntry(k)).filter(Boolean);const already=es.filter(e=>{const s=shopFor(e.key);return s&&!s.hidden;});
-  const hidden=es.filter(e=>{const s=shopFor(e.key);return s&&s.hidden;}),fresh=es.filter(e=>!shopFor(e.key)),noPh=fresh.filter(e=>!e.photo).length;
+  const hidden=es.filter(e=>{const s=shopFor(e.key);return s&&s.hidden;}),fresh=es.filter(e=>!shopFor(e.key)),noPh=fresh.filter(e=>!e.photo&&!e.thumb).length;
   if(!fresh.length&&!hidden.length){clearTimeout(pubT);publishShop();toast('Все выбранные уже есть — сайт обновлён: '+pubState.n);return;}
   if(!confirm('Опубликовать на сайте: '+(fresh.length+hidden.length)+' '+plural(fresh.length+hidden.length,'товар','товара','товаров')+'?'+(already.length?'\nУже на сайте: '+already.length+' (пропущу).':'')+(noPh?'\nБез фото: '+noPh+' — фото можно добавить потом в «Витрине».':'')+'\n\nНе закрывайте приложение, пока идёт публикация.'))return;
   pubBusy={done:0,total:fresh.length+hidden.length};const prog=()=>{const bt=$('#panel [data-act=ctPublish]');if(bt)bt.textContent='⏳ Публикую '+pubBusy.done+' из '+pubBusy.total+'…';};prog();
@@ -761,9 +762,9 @@ async function ctPublish(){
     hidden.forEach(e=>{DB.update('shop',shopFor(e.key).id,{hidden:false});pubBusy.done++;});prog();
     // фото загружаем по 4 сразу — так в разы быстрее
     for(let i=0;i<fresh.length;i+=4){const part=fresh.slice(i,i+4);
-      const recs=await Promise.all(part.map(async(e,j)=>{const ph=e.photo?await getPhoto(e.photo):null;
-        return {id:'s'+uid(),ph,rec:{name:e.name,cat:e.cat,desc:'',sizes:'',colors:'',avail:'yes',hidden:false,created:now,ord:now+i+j,ck:e.key,nph:ph?1:0,thumb:ph?await shrinkDataUrl(ph,420,0.6):''}};}));
-      recs.forEach(r=>{r.rec.code=++code;if(r.ph)DB.set('pubPhotos',r.id,{data:[r.ph]});DB.set('shop',r.id,r.rec);pubBusy.done++;});prog();}
+      const recs=await Promise.all(part.map(async(e,j)=>{const phs=await loadCatPhotos(e.key,e);
+        return {id:'s'+uid(),phs,rec:{name:e.name,cat:e.cat,desc:'',sizes:'',colors:'',avail:e.avail||'yes',hidden:false,created:now,ord:now+i+j,ck:e.key,nph:phs.length,thumb:phs.length?await shrinkDataUrl(phs[0],420,0.6):''}};}));
+      recs.forEach(r=>{r.rec.code=++code;if(r.phs.length)DB.set('pubPhotos',r.id,{data:r.phs});DB.set('shop',r.id,r.rec);pubBusy.done++;});prog();}
   }catch(err){alert('Публикация прервалась: '+(err.message||err)+'\nНажмите «На сайт» ещё раз — уже добавленные товары пропустятся.');}
   // ждём, пока новые товары попадут в список, и сразу пересобираем сайт
   await new Promise(r=>setTimeout(r,900));clearTimeout(pubT);publishShop();
@@ -774,17 +775,20 @@ async function ctPublish(){
 function ctCard(key0){return detail(()=>{
   const e=catEntry(key0);if(!e)return null;const sh=shopFor(e.key),st=e.supList;
   const altKeys=Object.keys(e.keys).filter(k=>k!==e.key&&(cache.catalog[k]||{}).mergeTo);
-  let b='<div class="card" style="display:flex;gap:14px;align-items:center"><button class="th" style="width:84px;height:84px;border-radius:14px" data-act="ctPhoto" data-k="'+esc(e.key)+'">'+(e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:34px;line-height:84px;text-align:center">'+catIc(e.cat)+'</div>')+'</button>'+
-    '<div class="grow"><div style="font-size:21px;font-weight:700;line-height:1.2">'+esc(e.name)+'</div><div class="s">'+esc((e.unit?'ед.: '+e.unit+' · ':'')+'заказывали '+e.cnt+' '+plural(e.cnt,'раз','раза','раз')+(e.lastD?' · последний '+fmtD(e.lastD):''))+'</div>'+
+  let b='<div class="card" style="display:flex;gap:14px;align-items:center"><button class="th" style="width:84px;height:84px;border-radius:14px" data-act="ctPhoto" data-k="'+esc(e.key)+'">'+(e.thumb?'<img src="'+e.thumb+'" alt="">':e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:34px;line-height:84px;text-align:center">'+catIc(e.cat)+'</div>')+'</button>'+
+    '<div class="grow"><div style="font-size:21px;font-weight:700;line-height:1.2">'+esc(e.name)+'</div><div class="s">'+esc((e.unit?'ед.: '+e.unit+' · ':'')+(e.cnt?'заказывали '+e.cnt+' '+plural(e.cnt,'раз','раза','раз')+(e.lastD?' · последний '+fmtD(e.lastD):''):'добавлен вручную, в заказах ещё не было'))+'</div>'+
     (sh?'<div style="margin-top:6px"><span class="badge '+(sh.hidden?'m':'g')+'">'+(sh.hidden?'скрыт на сайте':'на сайте · арт. '+(sh.code||'—'))+'</span></div>':'')+'</div></div>';
   b+=F.chips('ctcat','Раздел',Object.keys(SHOP_CATS).map(k=>[k,SHOP_CATS[k]]),e.cat);
-  b+='<h2>Где брать · по поставщикам</h2>'+(st.length?'<div class="list">'+st.map(s=>'<button class="row" data-act="'+(s.gk==='_'?'ctNoop':'supOpen')+'" data-g="'+esc(s.gk)+'" style="min-height:54px"><div class="grow"><div class="t ell">'+esc(s.gk==='_'?s.g:(supEntry(s.gk)||{name:s.g}).name)+(s.cheap?' <span class="badge g">дешевле</span>':'')+'</div><div class="s">'+esc((s.gk!=='_'&&supEntry(s.gk)&&supWhere(supEntry(s.gk).info)?supWhere(supEntry(s.gk).info)+' · ':'')+'последний раз '+fmtD(s.last.d)+' · '+s.n+' '+plural(s.n,'раз','раза','раз'))+'</div></div><div class="amt" style="font-size:14px;white-space:normal;max-width:42%">'+esc(s.last.sup!=null?histPrice(s.last):'цена?')+'</div></button>').join('')+'</div>':'<div class="card empty" style="padding:14px">Пока только «нет в наличии»</div>');
+  if(e.cnt)b+='<h2>Где брать · по поставщикам</h2>'+(st.length?'<div class="list">'+st.map(s=>'<button class="row" data-act="'+(s.gk==='_'?'ctNoop':'supOpen')+'" data-g="'+esc(s.gk)+'" style="min-height:54px"><div class="grow"><div class="t ell">'+esc(s.gk==='_'?s.g:(supEntry(s.gk)||{name:s.g}).name)+(s.cheap?' <span class="badge g">дешевле</span>':'')+'</div><div class="s">'+esc((s.gk!=='_'&&supEntry(s.gk)&&supWhere(supEntry(s.gk).info)?supWhere(supEntry(s.gk).info)+' · ':'')+'последний раз '+fmtD(s.last.d)+' · '+s.n+' '+plural(s.n,'раз','раза','раз'))+'</div></div><div class="amt" style="font-size:14px;white-space:normal;max-width:42%">'+esc(s.last.sup!=null?histPrice(s.last):'цена?')+'</div></button>').join('')+'</div>':'<div class="card empty" style="padding:14px">Пока только «нет в наличии»</div>');
   if(e.hist.length)b+='<h2>История закупа<span>'+e.hist.length+'</span></h2><div class="list">'+e.hist.slice(0,40).map(h=>'<button class="row" data-act="openOrder" data-id="'+h.oid+'" style="min-height:54px"><div class="grow"><div class="t ell">'+esc(fmtD(h.d)+' · №'+h.num+' '+h.client)+'</div><div class="s ell">'+esc([h.qty?nf.format(h.qty)+' '+h.unit:'',h.g||'',h.done?'выкуплено':''].filter(Boolean).join(' · '))+'</div></div><div class="amt" style="font-size:14px;white-space:normal;max-width:42%">'+esc(h.sup!=null?histPrice(h):'—')+'</div></button>').join('')+'</div>'+(e.hist.length>40?'<div class="hint">Показаны последние 40</div>':'');
   const sim=similarTo(e);
   if(sim.length)b+='<h2>Похоже на</h2><div class="list">'+sim.map(x=>'<div class="row" style="min-height:52px"><div class="grow"><div class="t ell">'+esc(x.name)+'</div><div class="s">'+esc(SHOP_CATS[x.cat]+' · '+x.cnt+' '+plural(x.cnt,'заказ','заказа','заказов'))+'</div></div><button class="btn small" data-act="ctMergeDo" data-auto="1" data-k="'+esc(x.key)+'" data-to="'+esc(e.key)+'">Склеить</button></div>').join('')+'</div><div class="hint">«Склеить» — это один и тот же товар, история и цены объединятся. Можно отменить ниже.</div>';
   if(Object.keys(e.names).length>1||altKeys.length)b+='<h2>Названия в заказах</h2><div class="list">'+Object.entries(e.names).sort((a,b)=>b[1]-a[1]).map(([nm,c])=>{const k=ckOf(nm),sep=k!==e.key&&altKeys.includes(k);return '<div class="row" style="min-height:48px"><div class="grow"><div class="ell">'+esc(nm)+'</div><div class="s">'+c+' '+plural(c,'раз','раза','раз')+'</div></div>'+(sep?'<button class="btn small" data-act="ctUnmerge" data-k="'+esc(k)+'">Отделить</button>':'')+'</div>';}).join('')+'</div>';
+  if(e.cat==='fabric')b+='<h2>Пост в Telegram-канал'+(e.posted?'<span>был '+fmtD(isoDate(new Date(e.posted)))+'</span>':'')+'</h2><div class="card" style="white-space:pre-wrap;font-size:15px;line-height:1.45">'+tgLines(e,true).replace('<a ','<a style="color:var(--accent)" target="_blank" rel="noopener" ')+'</div>'+
+    ((e.tg||{}).price?'':'<div class="hint">Цену, ширину и метраж в рулоне впишите в «✏️ Изменить, фото».</div>')+
+    '<div class="btns two"><button class="btn primary" data-act="ctTgOne" data-k="'+esc(e.key)+'">📢 В канал</button><button class="btn" data-act="ctTgShare" data-k="'+esc(e.key)+'">📤 Вручную</button></div>';
   b+='<div class="btns" style="margin-top:18px">'+(sh?'<button class="btn primary" data-act="ctShopOpen" data-k="'+esc(e.key)+'">🛍 Открыть на сайте (витрина)</button>':'<button class="btn primary" data-act="ctToShop" data-k="'+esc(e.key)+'">🛍 На сайт</button>')+'</div>'+
-    '<div class="btns two"><button class="btn" data-act="ctRename" data-k="'+esc(e.key)+'">✏️ Название</button><button class="btn" data-act="ctMerge" data-k="'+esc(e.key)+'">🔗 Склеить с…</button></div>';
+    '<div class="btns two"><button class="btn" data-act="ctEdit" data-k="'+esc(e.key)+'">✏️ Изменить, фото</button><button class="btn" data-act="ctMerge" data-k="'+esc(e.key)+'">🔗 Склеить с…</button></div>';
   return {title:'Товар',body:b,hooks:{ctcat:v=>{ctMeta(e.key,{cat:v});toast('Раздел: '+SHOP_CATS[v]);}}};
 });}
 function ctMergeTo(from,to){from=ckResolve(from);to=ckResolve(to);if(!from||!to||from===to)return;
@@ -814,7 +818,7 @@ function supCard(gk){return detail(()=>{const s=supEntry(gk);if(!s)return null;c
   b+='<div class="btns"><button class="btn" data-act="supEdit" data-g="'+esc(gk)+'">✏️ Ряд, контейнер, телефон</button></div>';
   b+='<div class="money" style="grid-template-columns:1fr 1fr"><div class="card"><div class="l">Закуп за месяц</div><div class="v" style="font-size:15px">'+esc(sumsTxt(s.month)||'—')+'</div></div><div class="card"><div class="l">Всего выкуплено</div><div class="v" style="font-size:15px">'+esc(sumsTxt(s.total)||'—')+'</div></div></div>';
   const items=catalogList().filter(e=>e.sups[gk]);
-  if(items.length)b+='<h2>Товары<span>'+items.length+'</span></h2><div class="list">'+items.map(e=>{const l=e.sups[gk].last;return '<button class="row shrow" data-act="ctOpen" data-k="'+esc(e.key)+'"><div class="th">'+(e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:24px;line-height:54px;text-align:center">'+catIc(e.cat)+'</div>')+'</div><div class="grow"><div class="t" style="word-break:break-word">'+esc(e.name)+(e.sups[gk].cheap?' <span class="badge g">дешевле</span>':'')+'</div><div class="s">'+esc(fmtD(l.d)+' · '+e.sups[gk].n+' '+plural(e.sups[gk].n,'раз','раза','раз'))+'</div></div><div class="amt" style="font-size:14px;white-space:normal;max-width:42%">'+esc(l.sup!=null?histPrice(l):'—')+'</div></button>';}).join('')+'</div>';
+  if(items.length)b+='<h2>Товары<span>'+items.length+'</span></h2><div class="list">'+items.map(e=>{const l=e.sups[gk].last;return '<button class="row shrow" data-act="ctOpen" data-k="'+esc(e.key)+'"><div class="th">'+(e.thumb?'<img src="'+e.thumb+'" alt="">':e.photo?'<img data-ph="'+e.photo+'" alt="">':'<div style="font-size:24px;line-height:54px;text-align:center">'+catIc(e.cat)+'</div>')+'</div><div class="grow"><div class="t" style="word-break:break-word">'+esc(e.name)+(e.sups[gk].cheap?' <span class="badge g">дешевле</span>':'')+'</div><div class="s">'+esc(fmtD(l.d)+' · '+e.sups[gk].n+' '+plural(e.sups[gk].n,'раз','раза','раз'))+'</div></div><div class="amt" style="font-size:14px;white-space:normal;max-width:42%">'+esc(l.sup!=null?histPrice(l):'—')+'</div></button>';}).join('')+'</div>';
   const os=Object.keys(s.ords).map(id=>order(id)).filter(Boolean).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   if(os.length)b+='<h2>Заказы · счёт поставщику</h2><div class="list">'+os.slice(0,30).map(o=>{const its=itemsOf(o).filter(it=>gkOf(it.group)===gk&&it.status!=='na');const left=its.filter(it=>!isDone(it)).length;
     return '<div class="row"><button class="grow" style="text-align:left" data-act="openOrder" data-id="'+o.id+'"><div class="t ell">'+esc(ordTitle(o))+'</div><div class="s">'+esc(fmtD(o.date)+' · '+its.length+' поз.'+(left?' · не выкуплено '+left:' · всё выкуплено'))+'</div></button><button class="btn small" data-act="supInv" data-id="'+o.id+'" data-g="'+esc(s.ords[o.id])+'">📤 Счёт</button></div>';}).join('')+'</div>';
@@ -831,6 +835,107 @@ function supForm(gk){return ()=>{const s=gk?supEntry(gk):null;const i=s?s.info:{
     onSave:()=>{const nm=val('sp_nm');if(!nm){shakeEl('sp_nm');return false;}const key=gk||gkOf(nm);
       const rec=Object.assign({},(cache.suppliers||{})[key]||{},{title:nm,market:chipVal('spm')||'',row:val('sp_row'),cont:val('sp_cont'),phone:val('sp_ph'),note:val('sp_note')});
       DB.set('suppliers',key,rec);toast('Поставщик сохранён');}};};}
+/* ---- фото товара номенклатуры (до 10) и Telegram-канал ---- */
+const PH_MAX=10;
+// добавить фото в набор: весь набор должен поместиться в один документ Firestore (< 1 МБ)
+function galleryAdd(st,draw){const inp=$('#shInput');inp.value='';inp.onchange=async()=>{const fs=Array.from(inp.files||[]).slice(0,PH_MAX-st.list.length);if(!fs.length)return;toast('Сжимаю фото…');
+  for(const f of fs){try{st.list.push(await compressImage(f,1000,0.66));}catch(e){}}
+  let tot=st.list.reduce((a,u)=>a+u.length,0),q=0.6,mx=900;while(tot>900000&&q>0.25){st.list=await Promise.all(st.list.map(u=>shrinkDataUrl(u,mx,q)));tot=st.list.reduce((a,u)=>a+u.length,0);q-=0.07;mx-=80;}
+  st.changed=true;st.loaded=true;draw();};inp.click();}
+async function getDocData(coll,id){if(mode==='local')return ((local[coll]||{})[id]||{}).data||[];try{const s=await fb.getDoc(fb.doc(fb.db,coll,id));return s.exists()?(s.data().data||[]):[];}catch(_){return [];}}
+// фото товара: свои фото номенклатуры → фото с сайта → фото из позиции заказа
+async function loadCatPhotos(key,e){let l=await getDocData('catPhotos',key);if(l.length)return l;
+  const sh=shopFor(key);if(sh){l=await getDocData('pubPhotos',sh.id);if(l.length)return l;}
+  if(e&&e.photo){const p=await getPhoto(e.photo);if(p)return [p];}return [];}
+let ctPh=null;
+function drawCtPh(){const el=$('#ctph');if(!el||!ctPh)return;
+  el.innerHTML=(ctPh.loaded?'':'<div class="ph" style="display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)">загрузка…</div>')+ctPh.list.map((u,i)=>'<div class="ph"><img src="'+u+'" alt="">'+(i===0?'<span class="m">главное</span>':'<button class="m" data-act="ctPhMain" data-i="'+i+'" style="border:none">сделать главным</button>')+'<button class="x" data-act="ctPhDel" data-i="'+i+'">×</button></div>').join('')+
+    (ctPh.list.length<PH_MAX?'<button class="add" data-act="ctPhAdd">+<br>Фото<br><span style="font-weight:400;font-size:12px">'+ctPh.list.length+' / '+PH_MAX+'</span></button>':'');}
+const TG_AV={yes:'в Наличии',order:'под заказ',no:'нет в наличии'};
+function ctForm(key0,preset){return ()=>{
+  const e=key0?catEntry(key0):null;if(key0&&!e)return null;const key=e?e.key:null;
+  const d=Object.assign({name:'',cat:'fabric',avail:'yes',tg:{}},e?{name:e.name,cat:e.cat,avail:e.avail,tg:e.tg}:{},preset||{});const t=d.tg||{};
+  if(!ctPh||ctPh.id!==(key||'new')){ctPh={id:key||'new',list:[],loaded:!key,changed:false};
+    if(key)loadCatPhotos(key,e).then(l=>{if(ctPh&&ctPh.id===key&&!ctPh.changed){ctPh.list=l;ctPh.loaded=true;drawCtPh();}});}
+  return {title:e?'Изменить товар':'Новый товар',saveLabel:'Готово',body:
+    '<label class="fl">Фото (до '+PH_MAX+', первое — главное)</label><div class="phstrip" id="ctph"></div>'+
+    F.text('ct_nm','Наименование',d.name,'Например: Шерпа','autocapitalize="sentences"')+
+    F.chips('ctfcat','Раздел',Object.keys(SHOP_CATS).map(k=>[k,SHOP_CATS[k]]),d.cat)+
+    F.chips('ctav','Наличие',Object.keys(SHOP_AV).map(k=>[k,SHOP_AV[k]]),d.avail||'yes')+
+    '<div id="cttg" style="'+(d.cat==='fabric'?'':'display:none')+'"><h2 style="margin-top:22px">Для Telegram-канала</h2>'+
+    F.text('ct_pr','Цена',t.price,'5,5$-6$')+'<div class="two-col"><div>'+F.text('ct_w','Ширина',t.width,'170')+'</div><div>'+F.text('ct_roll','В рулоне',t.roll,'50+-')+'</div></div>'+
+    F.area('ct_more','Ещё строки (необязательно)',t.more,'Состав, плотность…')+
+    '<div class="hint">Цена видна только в посте канала — на сайте цен нет.</div></div>'+
+    '<button class="save" data-act="sheetSave">Сохранить</button>',
+    hooks:{ctfcat:v=>show('cttg',v==='fabric')},
+    onOpen:()=>{drawCtPh();if(!e)setTimeout(()=>{const x=$('#ct_nm');if(x)x.focus();},250);},
+    onSave:async()=>{const name=val('ct_nm');if(!name){shakeEl('ct_nm');return false;}
+      if(!ctPh.loaded){toast('Фото ещё загружаются…');return false;}
+      let k=key;if(!k){k=ckFromName(name);if(!k){shakeEl('ct_nm');return false;}}
+      const ex=catEntry(k);
+      const patch={cat:chipVal('ctfcat')||'fabric',avail:chipVal('ctav')||'yes',tg:{price:val('ct_pr'),width:val('ct_w'),roll:val('ct_roll'),more:val('ct_more')}};
+      if(!ex||name!==ex.name)patch.title=name;
+      if(!ex){patch.manual=true;patch.created=Date.now();}
+      let thumbSh=null;
+      if(ctPh.changed){const l=ctPh.list;DB.set('catPhotos',k,{data:l});patch.nph=l.length;patch.thumb=l.length?await shrinkDataUrl(l[0],200,0.6):DEL;if(l.length)thumbSh=await shrinkDataUrl(l[0],420,0.6);}
+      ctMeta(k,patch);
+      // если товар уже на сайте — обновить и его
+      const sh=shopFor(k);
+      if(sh){const sp={name,cat:patch.cat,avail:patch.avail};if(ctPh.changed){DB.set('pubPhotos',sh.id,{data:ctPh.list});sp.nph=ctPh.list.length;sp.thumb=thumbSh||'';}DB.update('shop',sh.id,sp);schedulePublish();}
+      ctPh=null;toast(ex?'Сохранено':'Товар добавлен в номенклатуру');
+      if(!key0){popSheet();pushSheet(ctCard(k));return 'stay';}}
+  };
+};}
+/* ---- Telegram ---- */
+const tgSet=()=>Object.assign({chat:'',token:'',phone:shopSet().wa||'996220276236',link:'Написать в WhatsApp'},S().tg||{});
+const tgEsc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function tgChat(c){c=String(c||'').trim();if(/^-?\d+$/.test(c))return c;c=c.replace(/^https?:\/\//,'').replace(/^(t|telegram)\.me\//,'').replace(/^@/,'').split(/[/?]/)[0];return c?'@'+c:'';}
+function tgLines(e,html){const t=e.tg||{},g=tgSet(),E=html?tgEsc:(x=>x);
+  const L=[E(e.name+' '+(TG_AV[e.avail||'yes']||''))];if(t.price)L.push('Цена '+E(t.price));if(t.width)L.push('Ширина '+E(t.width));if(t.roll)L.push('В рулоне '+E(t.roll));if(t.more)L.push(E(t.more));
+  const ph=String(g.phone||'').replace(/\D/g,'');if(ph){const url='https://wa.me/'+ph;L.push('',html?'<a href="'+url+'">'+tgEsc(g.link||'Написать в WhatsApp')+'</a>':(g.link||'Написать в WhatsApp')+': '+url);}
+  return L.join('\n');}
+async function tgApi(method,body){const g=tgSet();const r=await fetch('https://api.telegram.org/bot'+g.token.trim()+'/'+method,{method:'POST',body});let j;try{j=await r.json();}catch(_){throw new Error('Telegram ответил ошибкой '+r.status);}if(!j.ok){const err=new Error(tgErrRu(j.description||''));err.tg=true;throw err;}return j.result;}
+function tgErrRu(d){if(/chat not found/i.test(d))return 'канал не найден — проверьте @ник канала';if(/not enough rights|administrator|CHAT_WRITE_FORBIDDEN|need administrator/i.test(d))return 'бот не админ канала или нет права публиковать';if(/Unauthorized|Not Found/i.test(d))return 'неверный ключ бота';if(/Too Many Requests/i.test(d))return 'Telegram просит подождать минуту';return d;}
+const dataUrlBlob=async u=>(await fetch(u)).blob();
+async function tgPost(e){const photos=(await loadCatPhotos(e.key,e)).slice(0,10);const cap=tgLines(e,true);const fd=new FormData();fd.append('chat_id',tgChat(tgSet().chat));
+  if(photos.length>=2){const media=[];for(let i=0;i<photos.length;i++){fd.append('f'+i,await dataUrlBlob(photos[i]),'p'+i+'.jpg');media.push(Object.assign({type:'photo',media:'attach://f'+i},i===0?{caption:cap,parse_mode:'HTML'}:{}));}fd.append('media',JSON.stringify(media));await tgApi('sendMediaGroup',fd);}
+  else if(photos.length===1){fd.append('photo',await dataUrlBlob(photos[0]),'p.jpg');fd.append('caption',cap);fd.append('parse_mode','HTML');await tgApi('sendPhoto',fd);}
+  else{fd.append('text',cap);fd.append('parse_mode','HTML');fd.append('disable_web_page_preview','true');await tgApi('sendMessage',fd);}
+  ctMeta(e.key,{posted:Date.now()});}
+let tgBusy=null;
+async function tgPublish(keys){
+  if(tgBusy){toast('Подождите — ещё публикую в канал '+tgBusy.done+' из '+tgBusy.total);return;}
+  const g=tgSet();if(!g.token||!tgChat(g.chat)){toast('Сначала настройте канал');pushSheet(tgForm());return;}
+  const es=keys.map(k=>catEntry(k)).filter(Boolean),fab=es.filter(e=>e.cat==='fabric');
+  if(!fab.length){alert('В канал публикуются только ткани. Среди выбранных тканей нет.');return;}
+  const noPr=fab.filter(e=>!(e.tg||{}).price).length,again=fab.filter(e=>e.posted).length;
+  if(!confirm('Опубликовать в Telegram-канал: '+fab.length+' '+plural(fab.length,'пост','поста','постов')+'?'+(es.length>fab.length?'\nНе ткани ('+(es.length-fab.length)+') пропущу.':'')+(noPr?'\nБез цены: '+noPr+'.':'')+(again?'\nУже публиковали раньше: '+again+' — опубликую ещё раз.':'')))return;
+  tgBusy={done:0,total:fab.length};const prog=()=>{const bt=$('#panel [data-act=ctTgSel],#panel [data-act=ctTgOne]');if(bt)bt.textContent='⏳ В канал '+tgBusy.done+' из '+tgBusy.total+'…';};prog();
+  let fail=null;
+  for(let i=0;i<fab.length;i++){try{await tgPost(fab[i]);tgBusy.done++;prog();}catch(err){fail={e:fab[i],err};break;}
+    if(i<fab.length-1)await new Promise(r=>setTimeout(r,3500));}
+  const n=tgBusy.done;tgBusy=null;ctS.sel=null;refreshSheet();
+  if(fail){if(fail.err.tg)alert('Опубликовано: '+n+'. Остановилось на «'+fail.e.name+'»: '+fail.err.message);
+    else if(confirm('Опубликовано: '+n+'. Не удалось связаться с Telegram ('+(fail.err.message||fail.err)+').\nПоделиться «'+fail.e.name+'» вручную? Текст скопируется, фото откроются для отправки.'))tgShareManual(fail.e);}
+  else toast('В канале: +'+n+' ✅');
+}
+async function tgShareManual(e){const txt=tgLines(e,false);try{await navigator.clipboard.writeText(txt);}catch(_){}
+  const photos=(await loadCatPhotos(e.key,e)).slice(0,10);
+  try{const files=await Promise.all(photos.map(async(u,i)=>new File([await dataUrlBlob(u)],'foto'+(i+1)+'.jpg',{type:'image/jpeg'})));
+    if(files.length&&navigator.canShare&&navigator.canShare({files})){toast('Текст скопирован — вставьте его подписью');await navigator.share({files});return;}}catch(err){if(err&&err.name==='AbortError')return;}
+  shareText(txt);}
+function tgForm(){return ()=>{const g=tgSet();
+  return {title:'Telegram-канал',saveLabel:'Готово',body:
+    '<div class="box">В канал публикуются <b>только ткани</b>. Чтобы приложение могло публиковать: создайте бота в @BotFather и добавьте его <b>администратором</b> канала с правом «Публикация сообщений».</div>'+
+    F.text('tg_ch','Канал: @ник или ссылка',g.chat,'@eritextile или https://t.me/…','autocapitalize="off" autocomplete="off"')+
+    F.text('tg_tok','Ключ бота (от @BotFather)',g.token,'123456789:AA…','autocapitalize="off" autocomplete="off"')+
+    F.text('tg_ph','Номер для ссылки в посте (WhatsApp)',g.phone,'996220276236','inputmode="tel"')+
+    F.text('tg_lk','Текст ссылки',g.link,'Написать в WhatsApp')+
+    '<div class="btns"><button class="btn" data-act="tgTest">🔌 Проверить связь с каналом</button></div><div class="box" id="tg_res" style="display:none"></div>'+
+    '<div class="hint">Ключ бота хранится в вашей базе и виден только вам двоим. Номер и текст ссылки можно поменять в любой момент — следующие посты пойдут с новыми.</div>'+
+    '<button class="save" data-act="sheetSave">Сохранить</button>',
+    onSave:()=>{const tg={chat:val('tg_ch'),token:val('tg_tok'),phone:val('tg_ph').replace(/\D/g,''),link:val('tg_lk')||'Написать в WhatsApp'};
+      if(!cache.meta.settings)cache.meta.settings={};cache.meta.settings.tg=tg;DB.update('meta','settings',{tg});toast('Сохранено');}};};}
 /* ============ sheets ============ */
 const stack=[];let hooks={},curSave=null;
 function pushSheet(fn){stack.push(fn);drawSheet(true);}
@@ -1430,7 +1535,7 @@ const A={
   ctSelAll:()=>{if(!ctS.sel)ctS.sel=new Set();ctFiltered().forEach(e=>ctS.sel.add(e.key));refreshSheet();},
   ctToggle:d=>{if(!ctS.sel)return;if(ctS.sel.has(d.k))ctS.sel.delete(d.k);else ctS.sel.add(d.k);refreshSheet();},
   ctPublish:()=>ctPublish(),
-  ctPhoto:d=>{const e=catEntry(d.k);if(e&&e.photo)viewPhoto(e.photo,null);},
+  ctPhoto:d=>{ctPh=null;pushSheet(ctForm(d.k));},
   ctRename:d=>{const e=catEntry(d.k);if(!e)return;const r=prompt('Название товара в справочнике',e.name);if(r==null)return;ctMeta(e.key,{title:r.trim()||DEL});toast('Сохранено');},
   ctMerge:d=>{ctM.q='';pushSheet(ctMergeSheet(d.k));},
   ctMergeDo:d=>{let a=catEntry(d.k),b=catEntry(d.to);if(!a||!b)return;if(d.auto&&a.hist.length>b.hist.length){const t=a;a=b;b=t;}if(!confirm('Склеить «'+a.name+'» с «'+b.name+'»? История и цены объединятся.'))return;
@@ -1441,6 +1546,22 @@ const A={
   ctToShop:async d=>{const e=catEntry(d.k);if(!e)return;const ph=e.photo?await getPhoto(e.photo):null;shopPh=null;pushSheet(shopForm(null,{name:e.name,cat:e.cat,photos:ph?[ph]:[],ck:e.key}));},
   ctShopOpen:d=>{const sh=shopFor(ckResolve(d.k));if(sh){shopPh=null;pushSheet(shopForm(sh.id));}},
   openSuppliers:()=>pushSheet(supplierSheet()),
+  ctAdd:()=>{ctPh=null;pushSheet(ctForm(null,ctS.cat&&SHOP_CATS[ctS.cat]?{cat:ctS.cat}:null));},
+  ctEdit:d=>{ctPh=null;pushSheet(ctForm(d.k));},
+  ctPhAdd:()=>{if(ctPh)galleryAdd(ctPh,drawCtPh);},
+  ctPhDel:d=>{ctPh.list.splice(+d.i,1);ctPh.changed=true;drawCtPh();},
+  ctPhMain:d=>{const u=ctPh.list.splice(+d.i,1)[0];ctPh.list.unshift(u);ctPh.changed=true;drawCtPh();},
+  ctTgSel:()=>{const ks=Array.from(ctS.sel||[]);if(!ks.length){toast('Отметьте ткани галочками');return;}tgPublish(ks);},
+  ctTgOne:d=>tgPublish([ckResolve(d.k)]),
+  ctTgShare:d=>{const e=catEntry(d.k);if(e)tgShareManual(e);},
+  tgSettings:()=>pushSheet(tgForm()),
+  tgTest:async()=>{const res=$('#tg_res');res.style.display='';res.className='box';res.textContent='Проверяю…';const tok=val('tg_tok').trim(),chat=tgChat(val('tg_ch'));
+    if(!tok||!chat){res.className='box bad';res.textContent='Заполните канал и ключ бота';return;}
+    const call=async(m,p)=>{const r=await fetch('https://api.telegram.org/bot'+tok+'/'+m+'?'+new URLSearchParams(p));const j=await r.json();if(!j.ok)throw new Error(tgErrRu(j.description||''));return j.result;};
+    try{const me=await call('getMe',{});const ch=await call('getChat',{chat_id:chat});const mem=await call('getChatMember',{chat_id:chat,user_id:me.id});
+      const ok=mem.status==='administrator'&&mem.can_post_messages!==false;res.className='box '+(ok?'good':'warn');
+      res.innerHTML=ok?'✅ Всё готово: бот @'+esc(me.username)+' — админ канала «'+esc(ch.title)+'». Нажмите «Сохранить».':'⚠ Бот @'+esc(me.username)+' видит канал «'+esc(ch.title)+'», но он не админ с правом публикации.';}
+    catch(err){res.className='box bad';res.textContent='❌ '+(err instanceof TypeError?'Нет связи с Telegram. Проверьте интернет.':(err.message||err));}},
   supOpen:d=>{if(d.g&&d.g!=='_')pushSheet(supCard(d.g));},
   supAdd:()=>pushSheet(supForm(null)),
   supEdit:d=>pushSheet(supForm(d.g)),
