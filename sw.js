@@ -1,5 +1,5 @@
 // «Закуп»: открывается без интернета. Данные Firestore кэширует сама библиотека Firebase.
-const CACHE = 'zakup-v9';
+const CACHE = 'zakup-v10';
 const FILES = ['./', './index.html', './icon.png'];
 const FB = 'https://www.gstatic.com/firebasejs/';
 
