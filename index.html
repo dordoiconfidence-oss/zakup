@@ -584,13 +584,14 @@ const SHOP_AV={yes:'В наличии',order:'Под заказ',no:'Нет в �
 const SITE_DEF='https://dordoiconfidence-oss.github.io/';
 const shopSet=()=>Object.assign({site:SITE_DEF,wa:'996220276236',tg:'',tgc:'',about:'Ткани, косметика и одежда с рынков Москвы — подберём и отправим в ваш город.'},S().shop||{});
 const shopItems=()=>Object.entries(cache.shop||{}).map(([id,v])=>Object.assign({id},v)).sort((a,b)=>(b.ord||0)-(a.ord||0));
-let shopFilter='all',pubT=null;
+let shopFilter='all',pubT=null,pubState=null,pubBusy=null;
 function schedulePublish(){clearTimeout(pubT);pubT=setTimeout(publishShop,1200);}
 function publishShop(){
   const st=S(),sh=shopSet();
   const items=shopItems().filter(x=>!x.hidden).map(x=>({id:x.id,code:x.code||0,name:x.name||'',cat:x.cat||'cosm',desc:x.desc||'',sizes:x.sizes||'',colors:x.colors||'',avail:x.avail||'yes',thumb:x.thumb||'',nph:x.nph||0,created:x.created||0}));
-  const pages=[];let cur=[],len=0;items.forEach(it=>{const l=JSON.stringify(it).length+50;if(cur.length&&len+l>850000){pages.push(cur);cur=[];len=0;}cur.push(it);len+=l;});if(cur.length||!pages.length)pages.push(cur);
+  const enc=new TextEncoder();const pages=[];let cur=[],len=0;items.forEach(it=>{const l=enc.encode(JSON.stringify(it)).length+80;if(cur.length&&len+l>800000){pages.push(cur);cur=[];len=0;}cur.push(it);len+=l;});if(cur.length||!pages.length)pages.push(cur);
   pages.forEach((p,i)=>DB.set('pub','p'+i,{items:p}));
+  pubState={n:items.length,t:Date.now()};
   DB.set('pub','meta',{pages:pages.length,count:items.length,brand:st.brand||'',instagram:st.instagram||'',wa:(sh.wa||'').replace(/\D/g,''),tg:(sh.tg||'').replace(/^@|^https?:\/\/t\.me\//,''),tgc:sh.tgc||'',about:sh.about||'',accent:invColors().T,updated:Date.now()});
 }
 function shopList(){return detail(()=>{
@@ -599,6 +600,7 @@ function shopList(){return detail(()=>{
   return {title:'Витрина на сайте',body:
     '<div class="btns two" style="margin-top:0"><a class="btn primary" href="'+esc(sh.site)+'" target="_blank" rel="noopener">🌐 Открыть сайт</a><button class="btn" data-act="shopShare">🔗 Ссылка</button></div>'+
     '<div class="btns two"><button class="btn primary" data-act="shopAdd">+ Товар</button><button class="btn" data-act="shopSettings">⚙️ Контакты</button></div>'+
+    '<div class="btns"><button class="btn" data-act="shopRepublish">🔄 Обновить сайт · показывается '+all.filter(x=>!x.hidden).length+'</button></div>'+
     '<div class="pchips" style="margin-top:14px">'+[['all','Все',all.length]].concat(Object.keys(SHOP_CATS).map(k=>[k,SHOP_CATS[k],cnt(k)])).map(c=>'<button class="pchip'+(shopFilter===c[0]?' on':'')+'" data-act="shopFilt" data-v="'+c[0]+'">'+c[1]+'<span class="c">'+c[2]+'</span></button>').join('')+'</div>'+
     (list.length?'<div class="list">'+list.map(x=>'<button class="row shrow" data-act="shopEdit" data-id="'+x.id+'"><div class="th">'+(x.thumb?'<img src="'+x.thumb+'" alt="">':'')+'</div><div class="grow"><div class="t ell">'+esc(x.name||'Без названия')+'</div><div class="s">Арт. '+(x.code||'—')+' · '+SHOP_CATS[x.cat||'cosm']+(x.avail&&x.avail!=='yes'?' · '+SHOP_AV[x.avail]:'')+'</div></div>'+(x.hidden?'<span class="badge m">скрыт</span>':'')+'<span class="chev">›</span></button>').join('')+'</div>'
       :'<div class="card empty"><div class="e">🛍</div>Добавьте товары с фото — они сразу появятся на сайте. Цены на сайте не показываются: клиент пишет вам в WhatsApp или Telegram.</div>')+
@@ -746,17 +748,27 @@ function catalogSheet(){return detail(()=>{
     '<div class="hint">Справочник собирается сам из позиций заказов. Одинаковые названия склеиваются автоматически, похожие — в карточке товара кнопкой «Склеить». Цены видны по каждому поставщику.</div>')};
 });}
 async function ctPublish(){
+  if(pubBusy){toast('Подождите — ещё публикую '+pubBusy.done+' из '+pubBusy.total);return;}
   const keys=Array.from(ctS.sel||[]);if(!keys.length){toast('Отметьте товары галочками');return;}
   const es=keys.map(k=>catEntry(k)).filter(Boolean);const already=es.filter(e=>{const s=shopFor(e.key);return s&&!s.hidden;});
   const hidden=es.filter(e=>{const s=shopFor(e.key);return s&&s.hidden;}),fresh=es.filter(e=>!shopFor(e.key)),noPh=fresh.filter(e=>!e.photo).length;
-  if(!fresh.length&&!hidden.length){toast('Все выбранные уже на сайте');return;}
-  if(!confirm('Опубликовать на сайте: '+(fresh.length+hidden.length)+' '+plural(fresh.length+hidden.length,'товар','товара','товаров')+'?'+(already.length?'\nУже на сайте: '+already.length+' (пропущу).':'')+(noPh?'\nБез фото: '+noPh+' — фото можно добавить потом в «Витрине».':'')))return;
-  toast('Публикую…');let code=shopItems().reduce((m,i)=>Math.max(m,i.code||0),0);const now=Date.now();
-  hidden.forEach(e=>DB.update('shop',shopFor(e.key).id,{hidden:false}));
-  for(let i=0;i<fresh.length;i++){const e=fresh[i],id='s'+uid();const ph=e.photo?await getPhoto(e.photo):null;
-    const rec={name:e.name,cat:e.cat,desc:'',sizes:'',colors:'',avail:'yes',hidden:false,code:++code,created:now,ord:now+i,ck:e.key,nph:ph?1:0,thumb:ph?await shrinkDataUrl(ph,480,0.6):''};
-    if(ph)DB.set('pubPhotos',id,{data:[ph]});DB.set('shop',id,rec);}
-  schedulePublish();ctS.sel=null;refreshSheet();toast('На сайте: +'+(fresh.length+hidden.length)+' — сайт обновится через пару секунд');
+  if(!fresh.length&&!hidden.length){clearTimeout(pubT);publishShop();toast('Все выбранные уже есть — сайт обновлён: '+pubState.n);return;}
+  if(!confirm('Опубликовать на сайте: '+(fresh.length+hidden.length)+' '+plural(fresh.length+hidden.length,'товар','товара','товаров')+'?'+(already.length?'\nУже на сайте: '+already.length+' (пропущу).':'')+(noPh?'\nБез фото: '+noPh+' — фото можно добавить потом в «Витрине».':'')+'\n\nНе закрывайте приложение, пока идёт публикация.'))return;
+  pubBusy={done:0,total:fresh.length+hidden.length};const prog=()=>{const bt=$('#panel [data-act=ctPublish]');if(bt)bt.textContent='⏳ Публикую '+pubBusy.done+' из '+pubBusy.total+'…';};prog();
+  const warn=e=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);
+  try{
+    let code=shopItems().reduce((m,i)=>Math.max(m,i.code||0),0);const now=Date.now();
+    hidden.forEach(e=>{DB.update('shop',shopFor(e.key).id,{hidden:false});pubBusy.done++;});prog();
+    // фото загружаем по 4 сразу — так в разы быстрее
+    for(let i=0;i<fresh.length;i+=4){const part=fresh.slice(i,i+4);
+      const recs=await Promise.all(part.map(async(e,j)=>{const ph=e.photo?await getPhoto(e.photo):null;
+        return {id:'s'+uid(),ph,rec:{name:e.name,cat:e.cat,desc:'',sizes:'',colors:'',avail:'yes',hidden:false,created:now,ord:now+i+j,ck:e.key,nph:ph?1:0,thumb:ph?await shrinkDataUrl(ph,420,0.6):''}};}));
+      recs.forEach(r=>{r.rec.code=++code;if(r.ph)DB.set('pubPhotos',r.id,{data:[r.ph]});DB.set('shop',r.id,r.rec);pubBusy.done++;});prog();}
+  }catch(err){alert('Публикация прервалась: '+(err.message||err)+'\nНажмите «На сайт» ещё раз — уже добавленные товары пропустятся.');}
+  // ждём, пока новые товары попадут в список, и сразу пересобираем сайт
+  await new Promise(r=>setTimeout(r,900));clearTimeout(pubT);publishShop();
+  window.removeEventListener('beforeunload',warn);const n=pubBusy.done;pubBusy=null;
+  ctS.sel=null;refreshSheet();toast('Готово: +'+n+' · на сайте всего '+pubState.n);
 }
 /* ---- карточка товара ---- */
 function ctCard(key0){return detail(()=>{
@@ -1440,6 +1452,7 @@ const A={
   shopEdit:d=>{shopPh=null;pushSheet(shopForm(d.id));},
   shopSettings:()=>pushSheet(shopSettingsForm()),
   shopShare:()=>shareText(shopSet().site),
+  shopRepublish:()=>{if(pubBusy){toast('Подождите, ещё публикую…');return;}clearTimeout(pubT);publishShop();toast('Сайт обновляется: '+pubState.n+' '+plural(pubState.n,'товар','товара','товаров'));},
   shopPhAdd:()=>shopPhAdd(),
   shopPhDel:d=>{shopPh.list.splice(+d.i,1);shopPh.changed=true;drawShopPh();},
   shopPhMain:d=>{const u=shopPh.list.splice(+d.i,1)[0];shopPh.list.unshift(u);shopPh.changed=true;drawShopPh();},
